@@ -916,7 +916,7 @@ class CharacterBot(commands.Bot):
                 {messages_text}
                 """
 
-                response = await openai.chat.completions.create(
+                response = openai.chat.completions.create(
                     model="gpt-4o",
                     messages=[{"role": "system", "content": prompt}],
                     max_tokens=200,
