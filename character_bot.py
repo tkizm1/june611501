@@ -1662,9 +1662,33 @@ class CardClaimView(discord.ui.View):
             success = self.db.add_user_card(self.user_id, self.character_name, self.card_id)
             
             if success:
+                # 카드 정보 가져오기
+                from config import get_card_info_by_id
+                card_info = get_card_info_by_id(self.character_name, self.card_id)
+                
+                # 새로운 임베드 생성 (이미지 포함)
+                embed = discord.Embed(
+                    title="🎉 Card Claimed Successfully!",
+                    description=f"You received **{card_info.get('name', self.card_id)}** ({card_info.get('tier', 'Unknown')} tier)!",
+                    color=discord.Color.gold()
+                )
+                
+                # 카드 이미지 설정
+                if card_info.get('image_url'):
+                    print(f"[DEBUG] CardClaimView - 카드 이미지 URL 설정: {card_info['image_url']}")
+                    embed.set_image(url=card_info['image_url'])
+                else:
+                    print(f"[DEBUG] CardClaimView - 카드 이미지 URL 없음: {card_info}")
+                
+                embed.add_field(
+                    name="Card Details",
+                    value=f"**Tier:** {card_info.get('tier', 'Unknown')}\n**Character:** {self.character_name}\n**Card ID:** {self.card_id}",
+                    inline=False
+                )
+                
                 button.disabled = True
-                button.label = "Claimed"
-                await interaction.message.edit(view=self)
+                button.label = "✅ Claimed"
+                await interaction.message.edit(embed=embed, view=self)
                 await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
             else:
                 # 이미 카드를 가지고 있는 경우
@@ -1675,7 +1699,7 @@ class CardClaimView(discord.ui.View):
             # 에러가 발생해도 카드가 저장되었을 수 있으므로 확인
             if self.db.has_user_card(self.user_id, self.character_name, self.card_id):
                 button.disabled = True
-                button.label = "Claimed"
+                button.label = "✅ Claimed"
                 await interaction.message.edit(view=self)
                 await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
             else:
