@@ -847,6 +847,7 @@ class BotSelector(commands.Bot):
         self.story_sessions = {}
         self.dm_sessions = {}  # DM 세션 관리
         self.roleplay_manager = RoleplayManager(self)  # 롤플레잉 매니저 초기화
+        self.channel_last_activity = {}  # 채널별 마지막 활동 시간 추적
         
         # Admin-only channel settings
         self.admin_channels = set()  # Channel IDs allowed for admin commands
@@ -993,6 +994,67 @@ class BotSelector(commands.Bot):
         
         # 자동 블랙리스트 정리 작업 시작
         asyncio.create_task(self.blacklist_cleanup_task())
+        
+        # 자동 채널 삭제 작업 시작
+        asyncio.create_task(self.auto_channel_deletion_task())
+
+    async def auto_channel_deletion_task(self):
+        """자동 채널 삭제 작업 (1분마다 실행)"""
+        while True:
+            try:
+                await asyncio.sleep(60)  # 1분마다 체크
+                await self.check_inactive_channels()
+            except Exception as e:
+                print(f"Error in auto channel deletion task: {e}")
+                await asyncio.sleep(60)
+
+    async def check_inactive_channels(self):
+        """비활성 채널을 확인하고 삭제합니다."""
+        import time
+        current_time = time.time()
+        inactive_threshold = 180  # 3분 = 180초
+        
+        channels_to_delete = []
+        
+        # 모든 캐릭터 봇의 active_channels 확인
+        for char_name, bot in self.character_bots.items():
+            for channel_id, channel_data in bot.active_channels.items():
+                last_activity = self.channel_last_activity.get(channel_id, current_time)
+                
+                # 3분 이상 비활성 상태인 채널 찾기
+                if current_time - last_activity > inactive_threshold:
+                    channels_to_delete.append((channel_id, char_name))
+        
+        # 비활성 채널 삭제
+        for channel_id, char_name in channels_to_delete:
+            try:
+                channel = self.get_channel(channel_id)
+                if channel:
+                    # 마지막 메시지 전송
+                    embed = discord.Embed(
+                        title="⏰ Chat Session Timeout",
+                        description="This chat channel will be deleted due to inactivity (3 minutes).\nThank you for chatting!",
+                        color=discord.Color.orange()
+                    )
+                    await channel.send(embed=embed)
+                    
+                    # 잠시 대기 후 채널 삭제
+                    await asyncio.sleep(2)
+                    await channel.delete()
+                    
+                    # 봇에서 채널 제거
+                    bot = self.character_bots.get(char_name)
+                    if bot:
+                        bot.remove_channel(channel_id)
+                    
+                    # 활동 시간 기록에서 제거
+                    if channel_id in self.channel_last_activity:
+                        del self.channel_last_activity[channel_id]
+                    
+                    print(f"[DEBUG] Auto-deleted inactive channel: {channel_id} ({char_name})")
+                    
+            except Exception as e:
+                print(f"Error deleting inactive channel {channel_id}: {e}")
 
     async def blacklist_cleanup_task(self):
         """자동 블랙리스트 정리 작업 (매 시간마다 실행)"""
@@ -3372,7 +3434,14 @@ class BotSelector(commands.Bot):
                     print(f"[DEBUG] {char_name} active_channels: {getattr(bot, 'active_channels', None)}")
                 # ====== 디버깅 로그 추가 끝 ======
 
-                if not channel.category or channel.category.name.lower() != "chatbot":
+                # 채널명으로 캐릭터 채팅 채널인지 확인
+                is_character_chat = False
+                for char_name in self.character_bots.keys():
+                    if channel.name.startswith(f"chat-{char_name.lower()}-"):
+                        is_character_chat = True
+                        break
+                
+                if not is_character_chat:
                     await interaction.response.send_message("This command can only be used in character chat channels.", ephemeral=True)
                     return
 
@@ -5850,6 +5919,11 @@ class BotSelector(commands.Bot):
         # 서버 채널에서의 메시지 처리
         if message.author.bot or not message.guild:
             return
+        
+        # 캐릭터 채팅 채널의 활동 시간 업데이트
+        import time
+        if message.channel.name.startswith("chat-"):
+            self.channel_last_activity[message.channel.id] = time.time()
 
         # --- Story Mode Message Handling ---
         if any(f'-s{i}-' in message.channel.name for i in range(1, 10)):
