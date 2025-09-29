@@ -6962,9 +6962,33 @@ class GiftConfirmButton(discord.ui.Button['GiftView']):
                             print(f"[DEBUG] Giving milestone card {milestone_card} to user {user_id}")
                         else:
                             print(f"[DEBUG] User {user_id} already has milestone card {milestone_card}")
-                    
-                    # 마일스톤 카드가 없거나 이미 보유한 경우, 호감도 등급에 따른 랜덤 카드 지급
-                    if not card_id_to_give:
+                            # 마일스톤 카드를 이미 보유한 경우에만 랜덤 카드 지급 고려
+                            # 호감도 등급별 카드 지급 확률
+                            grade_chances = {
+                                "Rookie": 0.05,    # 5%
+                                "Iron": 0.10,      # 10%
+                                "Bronze": 0.15,    # 15%
+                                "Silver": 0.20,    # 20%
+                                "Gold": 0.25,      # 25%
+                                "Platinum": 0.30,  # 30%
+                                "Diamond": 0.35    # 35%
+                            }
+                            
+                            import random
+                            chance = grade_chances.get(new_grade, 0.10)
+                            
+                            if random.random() < chance:
+                                # 중복 방지된 랜덤 카드 지급
+                                card_type, card_id = self.get_random_card(character_name, user_id)
+                                if card_id:
+                                    card_id_to_give = card_id
+                                    print(f"[DEBUG] Giving random card {card_id} to user {user_id} (grade: {new_grade}, chance: {chance})")
+                                else:
+                                    print(f"[DEBUG] No available cards for user {user_id} ({character_name})")
+                            else:
+                                print(f"[DEBUG] Card not given to user {user_id} (grade: {new_grade}, chance: {chance})")
+                    else:
+                        # 마일스톤 카드가 없는 경우에만 랜덤 카드 지급
                         # 호감도 등급별 카드 지급 확률
                         grade_chances = {
                             "Rookie": 0.05,    # 5%

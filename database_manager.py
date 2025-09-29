@@ -543,12 +543,20 @@ class DatabaseManager:
                 result = cursor.fetchone()
                 emotion_score_at_obtain = result[0] if result else 0
 
+                # acquired_at이 None이면 현재 시간으로 설정
+                if acquired_at is None:
+                    from datetime import datetime
+                    from pytz import timezone
+                    CST = timezone('Asia/Shanghai')
+                    acquired_at = datetime.now(CST)
+                    print(f"[DEBUG] acquired_at이 None이어서 현재 시간으로 설정: {acquired_at}")
+
                 # 카드 추가 (정규화된 카드 ID 사용)
                 cursor.execute(
                     "INSERT INTO user_cards (user_id, character_name, card_id, emotion_score_at_obtain, acquired_at) VALUES (%s, %s, %s, %s, %s)",
                     (user_id, character_name, normalized_card_id, emotion_score_at_obtain, acquired_at))
             conn.commit()
-            print(f"[DEBUG] Successfully added card {normalized_card_id} for user {user_id} ({character_name})")
+            print(f"[DEBUG] Successfully added card {normalized_card_id} for user {user_id} ({character_name}) at {acquired_at}")
             return True
         except Exception as e:
             print(f"Error adding user card: {e}")
@@ -2141,10 +2149,11 @@ class DatabaseManager:
                 today_cst = get_today_cst()
                 print(f"[DEBUG] get_user_daily_card_count - user_id={user_id}, today_cst={today_cst}")
                 
-                # 더 간단하고 일관된 방식으로 날짜 비교
+                # acquired_at이 NULL이 아닌 카드들만 조회 (NULL인 카드는 제외)
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
                     WHERE user_id = %s 
+                    AND acquired_at IS NOT NULL
                     AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
@@ -2155,6 +2164,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT card_id, character_name, acquired_at FROM user_cards 
                     WHERE user_id = %s 
+                    AND acquired_at IS NOT NULL
                     AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
