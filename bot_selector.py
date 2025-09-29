@@ -38,6 +38,7 @@ from math import ceil
 import urllib.parse
 from character_bot import CharacterBot
 import character_bot
+from roleplay_manager import RoleplayManager
 from story_mode import story_sessions, get_chapter_info
 from story_mode import start_story_stage, process_story_message, handle_chapter3_gift_usage, handle_serve_command
 import openai
@@ -247,24 +248,197 @@ except NameError:
         def __init__(self, *args, **kwargs):
             super().__init__()
 
+class RoleplayModeSelectView(discord.ui.View):
+    def __init__(self, character_name):
+        super().__init__(timeout=300)
+        self.character_name = character_name
+    
+    @discord.ui.button(label="💕 Romantic", style=discord.ButtonStyle.primary, emoji="💕")
+    async def romantic_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.show_modal(interaction, "romantic")
+    
+    @discord.ui.button(label="👥 Friendship", style=discord.ButtonStyle.secondary, emoji="👥")
+    async def friendship_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.show_modal(interaction, "friendship")
+    
+    @discord.ui.button(label="🕊️ Healing", style=discord.ButtonStyle.success, emoji="🕊️")
+    async def healing_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.show_modal(interaction, "healing")
+    
+    @discord.ui.button(label="⚔️ Fantasy", style=discord.ButtonStyle.danger, emoji="⚔️")
+    async def fantasy_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.show_modal(interaction, "fantasy")
+    
+    @discord.ui.button(label="✨ Custom", style=discord.ButtonStyle.secondary, emoji="✨")
+    async def custom_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.show_modal(interaction, "custom")
+    
+    async def show_modal(self, interaction: discord.Interaction, mode: str):
+        modal = RoleplayModal(self.character_name, mode)
+        await interaction.response.send_modal(modal)
+
 class RoleplayModal(discord.ui.Modal, title="Roleplay Settings"):
-        def __init__(self, character_name):
+        def __init__(self, character_name, mode="romantic"):
             super().__init__()
             self.character_name = character_name
-            self.user_role = discord.ui.TextInput(label="Your Role", max_length=150, required=True)
-            self.character_role = discord.ui.TextInput(label="Character Role", max_length=150, required=True)
-            self.story_line = discord.ui.TextInput(label="Story Line", max_length=1500, required=True, style=discord.TextStyle.paragraph)
+            self.selected_mode = mode
+            
+            # AI가 자동으로 생성할 기본값들
+            import random
+            story_seeds = self.get_story_seeds_for_character(character_name, mode)
+            default_story = random.choice(story_seeds) if story_seeds else "A cozy conversation between friends"
+            
+            # 캐릭터별 기본 롤 설정
+            character_roles = {
+                "Kagari": "A mysterious yokai warrior with snow-white hair",
+                "Eros": "A skilled barista and cafe owner",
+                "Elysia": "An energetic and curious cat girl"
+            }
+            
+            # 모드별 사용자 롤 설정
+            user_roles = {
+                "romantic": "A kind and caring person",
+                "friendship": "A loyal friend",
+                "healing": "A supportive companion",
+                "fantasy": "An adventurous soul",
+                "custom": "Your chosen role"
+            }
+            
             self.mode = discord.ui.TextInput(
                 label="Roleplay Mode", 
                 max_length=50, 
                 required=True, 
                 placeholder="romantic, friendship, healing, fantasy, custom",
-                default="romantic"
+                default=mode
             )
+            
+            self.user_role = discord.ui.TextInput(
+                label="Your Role", 
+                max_length=150, 
+                required=True,
+                default=user_roles.get(mode, "A kind person"),
+                placeholder="Describe your role in this scenario"
+            )
+            
+            self.character_role = discord.ui.TextInput(
+                label="Character Role", 
+                max_length=150, 
+                required=True,
+                default=character_roles.get(character_name, f"{character_name}'s role"),
+                placeholder="Describe the character's role"
+            )
+            
+            self.story_line = discord.ui.TextInput(
+                label="Story Line", 
+                max_length=1500, 
+                required=True, 
+                style=discord.TextStyle.paragraph,
+                default=default_story,
+                placeholder="Describe the scenario or situation"
+            )
+            
+            self.add_item(self.mode)
             self.add_item(self.user_role)
             self.add_item(self.character_role)
             self.add_item(self.story_line)
-            self.add_item(self.mode)
+
+        def get_story_seeds_for_character(self, character_name, mode):
+            """캐릭터와 모드에 맞는 스토리 시드를 반환합니다."""
+            story_seeds = {
+                "romantic": {
+                    "Kagari": [
+                        "A gentle walk through a flower garden at sunset",
+                        "Sharing a quiet moment under cherry blossoms",
+                        "A cozy tea ceremony in a traditional setting",
+                        "A romantic picnic by a peaceful lake",
+                        "Stargazing together on a clear night"
+                    ],
+                    "Eros": [
+                        "A special coffee tasting session just for two",
+                        "A romantic dinner at the cafe after hours",
+                        "Creating a custom dessert together",
+                        "A surprise date at a new cafe in town",
+                        "Sharing stories over warm drinks by the fireplace"
+                    ],
+                    "Elysia": [
+                        "An adventurous city exploration date (nya~ let's find shiny things!)",
+                        "A playful treasure hunt around town (like hunting mice, but for treasures!)",
+                        "A fun day at a cat cafe together (meeting other cute cats!)",
+                        "An exciting night market adventure (so many interesting smells and sounds!)",
+                        "A spontaneous road trip to somewhere new (adventure time nya~)"
+                    ]
+                },
+                "friendship": {
+                    "Kagari": [
+                        "A heart-to-heart conversation in a peaceful garden",
+                        "Cooking together and sharing family recipes",
+                        "A relaxing day of flower arranging",
+                        "A gentle walk through the neighborhood",
+                        "A cozy movie night with homemade treats"
+                    ],
+                    "Eros": [
+                        "A coffee shop business planning session",
+                        "A friendly competition in the kitchen",
+                        "A day of exploring new cafes together",
+                        "A mentoring session about life and career",
+                        "A casual hangout with good conversation"
+                    ],
+                    "Elysia": [
+                        "An exciting adventure to a new place (nya~ let's explore together!)",
+                        "A fun day of trying new activities (like a curious kitten discovering the world!)",
+                        "A playful game night with friends (hide and seek, but cat-style!)",
+                        "An exploration of hidden spots in the city (finding secret cat hideouts!)",
+                        "A spontaneous day of fun and laughter (purring with happiness!)"
+                    ]
+                },
+                "healing": {
+                    "Kagari": [
+                        "A peaceful meditation session in a quiet garden",
+                        "Sharing comforting words during a difficult time",
+                        "A gentle healing ritual under the moonlight",
+                        "A quiet walk to help clear your mind",
+                        "A therapeutic tea ceremony for relaxation"
+                    ],
+                    "Eros": [
+                        "A comforting conversation over warm coffee",
+                        "Sharing life experiences and wisdom",
+                        "A peaceful moment of reflection together",
+                        "A supportive talk during challenging times",
+                        "A healing conversation about growth and recovery"
+                    ],
+                    "Elysia": [
+                        "A gentle playtime to lift your spirits (purr therapy!)",
+                        "A comforting cuddle session (cat cuddles heal everything!)",
+                        "A fun distraction to help you feel better (nya~ let's play!)",
+                        "A warm and fuzzy moment of pure happiness",
+                        "A healing adventure to bring joy back to your heart"
+                    ]
+                },
+                "fantasy": {
+                    "Kagari": [
+                        "An epic battle against ancient spirits",
+                        "A mystical quest through enchanted forests",
+                        "A magical ritual to restore balance to the world",
+                        "An adventure through a haunted temple",
+                        "A journey to discover ancient yokai secrets"
+                    ],
+                    "Eros": [
+                        "A magical coffee shop that appears only at midnight",
+                        "An adventure to find the legendary Golden Coffee Bean",
+                        "A quest to save the enchanted cafe from dark magic",
+                        "A journey through a mystical coffee realm",
+                        "An epic battle using the power of perfect coffee"
+                    ],
+                    "Elysia": [
+                        "An exciting treasure hunt through magical realms (shiny treasures nya~!)",
+                        "A thrilling adventure to rescue lost kittens from evil forces",
+                        "A quest to find the legendary Cat's Eye gems",
+                        "An epic journey through enchanted forests (so many interesting smells!)",
+                        "A magical adventure to become the greatest cat adventurer ever!"
+                    ]
+                }
+            }
+            return story_seeds.get(mode, {}).get(character_name, ["A cozy conversation between friends"])
 
         async def on_submit(self, interaction: discord.Interaction):
             # Check for character limit (just in case of unexpected exceptions)
@@ -321,37 +495,80 @@ class RoleplayModal(discord.ui.Modal, title="Roleplay Settings"):
                     "story_line": self.story_line.value,
                     "mode": self.mode.value.lower(),
                     "session_id": session_id,
-                    "turns_remaining": 100
+                    "turns_remaining": turns_limit
                 }
 
                 # 3. Send embed to new channel
                 from config import CHARACTER_INFO
                 char_info = CHARACTER_INFO.get(self.character_name, {})
-                # 모드별 이모지 매핑
-                mode_emojis = {
-                    "romantic": "💕",
-                    "friendship": "👥", 
-                    "healing": "🕊️",
-                    "fantasy": "⚔️",
-                    "custom": "✨"
+                
+                # 모드별 설정 (이모지, 색상, 이미지, 턴 제한)
+                mode_config = {
+                    "romantic": {
+                        "emoji": "💕",
+                        "color": discord.Color.pink(),
+                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/c742a172-bdf3-4e97-2a80-1f5b7a100a00/public",
+                        "turns": 50,
+                        "description": "Love and romance scenarios"
+                    },
+                    "friendship": {
+                        "emoji": "👥",
+                        "color": discord.Color.blue(),
+                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/1e48be9b-ecd4-4936-6fb4-955fd444ac00/public",
+                        "turns": 50,
+                        "description": "Friendly and supportive interactions"
+                    },
+                    "healing": {
+                        "emoji": "🕊️",
+                        "color": discord.Color.green(),
+                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/5686b751-2d47-4084-6f76-8672282f7e00/public",
+                        "turns": 50,
+                        "description": "Comforting and therapeutic conversations"
+                    },
+                    "fantasy": {
+                        "emoji": "⚔️",
+                        "color": discord.Color.purple(),
+                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/b3aa214f-7736-43ea-64b4-9e749f09b500/public",
+                        "turns": 50,
+                        "description": "Adventure and fantasy scenarios"
+                    },
+                    "custom": {
+                        "emoji": "✨",
+                        "color": discord.Color.gold(),
+                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/bf6bb51e-f5fd-4e3b-d5b0-8b04deb3f800/public",
+                        "turns": 50,
+                        "description": "Your unique scenario"
+                    }
                 }
+                
+                current_mode = self.mode.value.lower()
+                mode_info = mode_config.get(current_mode, mode_config["custom"])
+                turns_limit = mode_info["turns"]
                 
                 embed = discord.Embed(
                     title=f"🎭 Roleplay Session with {self.character_name} Begins! 🎭",
                     description=(
                         f"🎬 **Roleplay Scenario** 🎬\n"
-                        f"**Mode:** {mode_emojis.get(self.mode.value.lower(), '✨')} {self.mode.value.title()}\n"
+                        f"**Mode:** {mode_info['emoji']} {self.mode.value.title()}\n"
                         f"**Your Role:** `{self.user_role.value}`\n"
                         f"**{self.character_name}'s Role:** `{self.character_role.value}`\n"
                         f"**Story/Situation:**\n> {self.story_line.value}\n\n"
                         f"✨ {self.character_name} will now act according to their role and personality in this scenario! ✨\n"
-                        f"💬 Enjoy 100 turns of immersive roleplay conversation."
+                        f"💬 Enjoy **{turns_limit} turns** of immersive roleplay conversation.\n"
+                        f"📊 **Turns Remaining:** {turns_limit}/100"
                     ),
-                    color=discord.Color.magenta()
+                    color=mode_info["color"]
                 )
+                
+                # 모드별 이미지 설정
+                mode_image = mode_info["image"]
+                embed.set_image(url=mode_image)
+                
+                # 캐릭터 썸네일 설정
                 icon_url = char_info.get('image') if char_info.get('image') else "https://i.postimg.cc/BZTJr9Np/ec6047e888811f61cc4b896a4c3dd22e.gif"
                 embed.set_thumbnail(url=icon_url)
-                embed.set_footer(text="🎭 Spot Zero Immersive Roleplay Mode")
+                
+                embed.set_footer(text=f"🎭 {mode_info['description']} • ZeroLink Roleplay Mode")
                 await channel.send(embed=embed)
 
                 # 4. Send notification message to existing channel
@@ -744,6 +961,7 @@ class BotSelector(commands.Bot):
         self.roleplay_sessions = {}
         self.story_sessions = {}
         self.dm_sessions = {}  # DM 세션 관리
+        self.roleplay_manager = RoleplayManager(self)  # 롤플레잉 매니저 초기화
         
         # Admin-only channel settings
         self.admin_channels = set()  # Channel IDs allowed for admin commands
@@ -3952,9 +4170,40 @@ class BotSelector(commands.Bot):
                     await interaction.response.send_message(embed=embed, ephemeral=True)
                     return
 
-                # 3. 모달 표시
-                modal = RoleplayModal(current_bot.character_name)
-                await interaction.response.send_modal(modal)
+                # 3. 모드 선택 뷰 표시
+                view = RoleplayModeSelectView(current_bot.character_name)
+                embed = discord.Embed(
+                    title=f"🎭 Roleplay Mode Selection",
+                    description=f"Choose a roleplay mode to start your session with **{current_bot.character_name}**!",
+                    color=discord.Color.magenta()
+                )
+                embed.add_field(
+                    name="💕 Romantic", 
+                    value="Love and romance scenarios", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="👥 Friendship", 
+                    value="Friendly and supportive interactions", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="🕊️ Healing", 
+                    value="Comforting and therapeutic conversations", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="⚔️ Fantasy", 
+                    value="Adventure and fantasy scenarios", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="✨ Custom", 
+                    value="Create your own unique scenario", 
+                    inline=True
+                )
+                embed.set_footer(text="AI will automatically generate story lines and roles based on your selection!")
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
             except Exception as e:
                 print(f"Error in /roleplay: {e}")

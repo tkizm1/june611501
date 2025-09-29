@@ -67,6 +67,16 @@ class RoleplayManager:
                 import traceback
                 print(f"[DEBUG] Traceback: {traceback.format_exc()}")
 
+            # 모드별 턴 제한 설정
+            mode_turn_limits = {
+                "romantic": 50,
+                "friendship": 50,
+                "healing": 50,
+                "fantasy": 50,
+                "custom": 50
+            }
+            max_turns = mode_turn_limits.get(mode, 50)
+            
             # 세션 저장
             self.roleplay_sessions[channel.id] = {
                 "session_id": session_id,
@@ -79,7 +89,7 @@ class RoleplayManager:
                 "turn_count": 0,
                 "history": [],
                 "db_saved": db_success,
-                "max_turns": 100,
+                "max_turns": max_turns,
                 "is_active": True
             }
             
@@ -194,6 +204,13 @@ class RoleplayManager:
                 inline=False
             )
             
+            # 턴 제한 정보 추가
+            welcome_embed.add_field(
+                name="📊 Session Info",
+                value=f"**Mode:** {mode.title()}\n**Turns:** 0/{max_turns}\n**Status:** Active",
+                inline=True
+            )
+            
             # 모드별 이미지 추가
             try:
                 image_url = ROLEPLAY_MODE_IMAGES.get(mode)
@@ -264,6 +281,9 @@ class RoleplayManager:
                 self.bot_selector.db.update_roleplay_message_count(session_id, session["turn_count"])
 
             turn_str = f"({session['turn_count']}/{max_turns})"
+            
+            # 턴 진행률 표시
+            progress_bar = self._create_progress_bar(session['turn_count'], max_turns)
 
             # 캐릭터별 특성과 톤앤매너 정의
             character_traits = self._get_character_traits()
@@ -581,6 +601,18 @@ class RoleplayManager:
     def get_session(self, channel_id: int) -> Optional[Dict[str, Any]]:
         """채널 ID로 롤플레잉 세션을 가져옵니다."""
         return self.roleplay_sessions.get(channel_id)
+
+    def _create_progress_bar(self, current: int, total: int) -> str:
+        """턴 진행률을 시각적으로 표시하는 프로그레스 바를 생성합니다."""
+        if total <= 0:
+            return "▱▱▱▱▱▱▱▱▱▱"
+        
+        percentage = min(current / total, 1.0)
+        filled_bars = int(percentage * 10)
+        empty_bars = 10 - filled_bars
+        
+        progress_bar = "▰" * filled_bars + "▱" * empty_bars
+        return f"{progress_bar} {int(percentage * 100)}%"
 
     def end_session(self, channel_id: int):
         """롤플레잉 세션을 종료합니다."""
