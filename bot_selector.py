@@ -3434,23 +3434,40 @@ class BotSelector(commands.Bot):
                     print(f"[DEBUG] {char_name} active_channels: {getattr(bot, 'active_channels', None)}")
                 # ====== 디버깅 로그 추가 끝 ======
 
-                # 채널명으로 캐릭터 채팅 채널인지 확인
+                # 채널명으로 캐릭터 채팅 채널 또는 롤플레잉 채널인지 확인
                 is_character_chat = False
-                for char_name in self.character_bots.keys():
-                    if channel.name.startswith(f"chat-{char_name.lower()}-"):
-                        is_character_chat = True
-                        break
+                is_roleplay_channel = False
                 
-                if not is_character_chat:
-                    await interaction.response.send_message("This command can only be used in character chat channels.", ephemeral=True)
+                # 롤플레잉 채널 확인
+                if channel.name.startswith("rp-"):
+                    is_roleplay_channel = True
+                else:
+                    # 캐릭터 채팅 채널 확인
+                    for char_name in self.character_bots.keys():
+                        if channel.name.startswith(f"chat-{char_name.lower()}-"):
+                            is_character_chat = True
+                            break
+                
+                if not is_character_chat and not is_roleplay_channel:
+                    await interaction.response.send_message("This command can only be used in character chat channels or roleplay channels.", ephemeral=True)
                     return
+                
+                # 롤플레잉 세션이 있는지 확인
+                roleplay_session = None
+                if is_roleplay_channel:
+                    roleplay_session = self.roleplay_manager.get_session(channel.id)
 
                 # 권한 체크
                 can_delete = False
                 try:
                     if interaction.user.guild_permissions.manage_channels or interaction.user.id == interaction.guild.owner_id:
                         can_delete = True
+                    elif is_roleplay_channel and roleplay_session:
+                        # 롤플레잉 채널의 경우 세션 생성자만 삭제 가능
+                        if roleplay_session.get("user_id") == interaction.user.id:
+                            can_delete = True
                     else:
+                        # 일반 채팅 채널의 경우 채널명으로 권한 확인
                         channel_name_parts = channel.name.split('-')
                         if len(channel_name_parts) > 1 and channel_name_parts[-1] == interaction.user.name.lower():
                             can_delete = True
@@ -3462,11 +3479,19 @@ class BotSelector(commands.Bot):
                     await interaction.response.send_message("You don't have permission to delete this channel.", ephemeral=True)
                     return
 
-                # 캐릭터 봇에서 채널 제거
-                for bot in self.character_bots.values():
-                    bot.remove_channel(channel.id)
-                if hasattr(self, 'remove_channel'):
-                    self.remove_channel(channel.id)
+                # 롤플레잉 세션이 있으면 먼저 종료 처리
+                if roleplay_session and roleplay_session.get("is_active"):
+                    character_name = roleplay_session.get("character_name", "Unknown")
+                    max_turns = roleplay_session.get("max_turns", 50)
+                    await self.roleplay_manager._end_roleplay_session(interaction, roleplay_session, character_name, max_turns)
+                    return
+
+                # 일반 채팅 채널의 경우 캐릭터 봇에서 채널 제거
+                if is_character_chat:
+                    for bot in self.character_bots.values():
+                        bot.remove_channel(channel.id)
+                    if hasattr(self, 'remove_channel'):
+                        self.remove_channel(channel.id)
 
                 # 응답 전송 후 채널 삭제 (중복 응답 방지)
                 if not interaction.response.is_done():
@@ -4096,29 +4121,29 @@ class BotSelector(commands.Bot):
                     await interaction.response.send_message("This command is only available in character chat channels.", ephemeral=True)
                     return
 
-                # 2. 호감도 체크 (Silver 이상만 허용)
+                # 2. 호감도 체크 (호감도 20 이상만 허용)
                 affinity_info = current_bot.db.get_affinity(interaction.user.id, current_bot.character_name)
                 affinity = affinity_info['emotion_score'] if affinity_info else 0
                 affinity_grade = get_affinity_grade(affinity)
-                if affinity < 50:
+                if affinity < 20:
                     embed = discord.Embed(
                         title="⚠️ Roleplay Mode Locked",
-                        description="Roleplay mode is only available for Silver level users.",
+                        description="Roleplay mode requires at least 20 affinity points.",
                         color=discord.Color.red()
                     )
                     embed.add_field(
-                        name="Current Level",
-                        value=f"**{affinity_grade}**",
+                        name="Current Affinity",
+                        value=f"**{affinity} points**",
                         inline=True
                     )
                     embed.add_field(
-                        name="Required Level",
-                        value="**Silver**",
+                        name="Required Affinity",
+                        value="**20 points**",
                         inline=True
                     )
                     embed.add_field(
                         name="How to Unlock",
-                        value="Keep chatting with the character to increase your affinity level!",
+                        value="Keep chatting with the character to increase your affinity!",
                         inline=False
                     )
                     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -4163,40 +4188,6 @@ class BotSelector(commands.Bot):
                 print(f"Error in /roleplay: {e}")
                 await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
 
-        @self.tree.command(
-            name="end-roleplay",
-            description="End the current roleplay session"
-        )
-        async def end_roleplay_command(interaction: discord.Interaction):
-            """현재 롤플레잉 세션을 종료합니다."""
-            try:
-                channel_id = interaction.channel.id
-                
-                # 롤플레잉 세션 확인
-                session = self.roleplay_manager.get_session(channel_id)
-                if not session or not session.get("is_active"):
-                    await interaction.response.send_message("❌ 활성화된 롤플레잉 세션이 없습니다.", ephemeral=True)
-                    return
-                
-                character_name = session.get("character_name", "Unknown")
-                mode = session.get("mode", "romantic")
-                turn_count = session.get("turn_count", 0)
-                max_turns = session.get("max_turns", 50)
-                
-                # 세션 종료 처리
-                await self.roleplay_manager._end_roleplay_session(interaction, session, character_name, max_turns)
-                
-                await interaction.response.send_message(
-                    f"🎭 롤플레잉 세션이 종료되었습니다!\n"
-                    f"**캐릭터:** {character_name}\n"
-                    f"**모드:** {mode.title()}\n"
-                    f"**진행 턴:** {turn_count}/{max_turns}",
-                    ephemeral=True
-                )
-                
-            except Exception as e:
-                print(f"Error in /end-roleplay: {e}")
-                await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
 
         # --- 인벤토리 및 선물 명령어 통합 ---
 
