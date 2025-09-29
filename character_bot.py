@@ -711,6 +711,8 @@ class CharacterBot(commands.Bot):
     async def handle_milestone_reward(self, message, character, user_id, new_milestone):
         """10, 20, 30, 40, 50, 60 등 10의 배수마다 등급별 확률표로 카드 지급. 중복 지급 방지."""
         try:
+            print(f"[DEBUG] handle_milestone_reward 호출: user_id={user_id}, character={character}, new_milestone={new_milestone}")
+            
             from config import get_card_tier_by_affinity, get_available_cards
             affinity = self.db.get_affinity(user_id, character)["emotion_score"]
             tier_probs = get_card_tier_by_affinity(affinity)
@@ -718,9 +720,13 @@ class CharacterBot(commands.Bot):
             tiers, probs = zip(*tier_probs)
             chosen_tier = random.choices(tiers, weights=probs, k=1)[0]
             
+            print(f"[DEBUG] 선택된 티어: {chosen_tier}, 친밀도: {affinity}")
+            
             # 사용자가 보유한 카드 목록 가져오기 (카드 ID만)
             user_cards = self.db.get_user_cards(user_id, character)
             user_card_ids = [card[0] for card in user_cards] if user_cards else []
+            
+            print(f"[DEBUG] 사용자 보유 카드: {user_card_ids}")
             
             # 중복되지 않은 카드만 선택
             available_cards = get_available_cards(character, chosen_tier, user_card_ids)
@@ -743,6 +749,8 @@ class CharacterBot(commands.Bot):
                 embed.set_image(url=card_info["image_path"])
             view = CardClaimView(user_id, card_id, character, self.db)
             await message.channel.send(embed=embed, view=view)
+            
+            print(f"[DEBUG] 카드 발급 완료: {card_id}")
 
         except Exception as e:
             print(f"Error in handle_milestone_reward: {e}")
