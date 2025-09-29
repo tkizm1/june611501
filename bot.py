@@ -83,21 +83,6 @@ class CharacterBot(commands.Bot):
         else:
             await ctx.send("해당 캐릭터를 찾을 수 없습니다.")
     
-    @commands.command()
-    async def log(self,ctx):
-        """show user paid info"""
-        url = f"http://69.176.84.110:5000/user/paid/{self.user.id}/product"
-        # 默认查询返回全部支付过的记录
-        payload = { "product_ids": [] }
-        headers = {"content-type": "application/json"}
-
-        response = requests.post(url, json=payload, headers=headers)
-
-        # print(response.json())
-        embed = discord.Embed(title=f"paid info: {response.json()}")
-        await ctx.send(embed=embed)
-        # pass
-        
 
     def set_user_language(self, user_id: int, character_name: str, language: str) -> bool:
         """사용자의 특정 캐릭터와의 대화 언어를 설정합니다."""

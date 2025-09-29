@@ -1,4 +1,5 @@
 from calendar import day_name
+import requests
 import os
 import discord
 from discord.ext import commands
@@ -5161,6 +5162,20 @@ class BotSelector(commands.Bot):
             try:
                 user_id = interaction.user.id
                 activity = self.db.get_user_recent_activity(user_id, limit=5)
+                url = f"http://69.176.84.110:5000/user/paid/{self.user.id}/product"
+                # 默认查询返回全部支付过的记录
+                payload = {"product_ids": ["GIFT_PACK_5", "MESSAGE_PACK_200"]}
+                headers = {"content-type": "application/json"}
+
+                response = requests.post(url, json=payload, headers=headers)
+                activity = {
+                    'payments':[]
+                }
+                for i in response['result']:
+                    if i['count']>0:
+                        activity['payments'].append({"product_id":i['item'],"amount":i['count'],"created_at":i['created']})
+                    else:
+                        activity['payments'].append({"product_id":i['item'],"status":False})
                 
                 embed = discord.Embed(
                     title="📋 Payment & Delivery Log",
