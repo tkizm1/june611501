@@ -457,125 +457,10 @@ class RoleplayModal(discord.ui.Modal, title="Roleplay Settings"):
                 if not hasattr(bot_selector, "roleplay_sessions"):
                     bot_selector.roleplay_sessions = {}
 
-                # 1. Create new roleplay channel
-                guild = interaction.guild
-                category = discord.utils.get(guild.categories, name="roleplay")
-                if not category:
-                    category = await guild.create_category("roleplay")
-                channel_name = f"rp-{self.character_name.lower()}-{interaction.user.name.lower()}-{int(datetime.now().timestamp())}"
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                    interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-                }
-                channel = await guild.create_text_channel(
-                    name=channel_name,
-                    category=category,
-                    topic=f"Roleplay with {self.character_name} for {interaction.user.name}",
-                    overwrites=overwrites
-                )
-
-                # 2. Save session information (only for new channels)
-                session_id = f"rp_{interaction.user.id}_{self.character_name}_{int(datetime.now().timestamp())}"
-                
-                # Save session to database
-                bot_selector.db.create_roleplay_session(
-                    session_id, interaction.user.id, self.character_name, 
-                    self.mode.value.lower(), self.user_role.value, 
-                    self.character_role.value, self.story_line.value
-                )
-                
-                # Also save to memory (maintain backward compatibility)
-                bot_selector.roleplay_sessions[channel.id] = {
-                    "is_active": True,
-                    "user_id": interaction.user.id,
-                    "character_name": self.character_name,
-                    "user_role": self.user_role.value,
-                    "character_role": self.character_role.value,
-                    "story_line": self.story_line.value,
-                    "mode": self.mode.value.lower(),
-                    "session_id": session_id,
-                    "turns_remaining": turns_limit
-                }
-
-                # 3. Send embed to new channel
-                from config import CHARACTER_INFO
-                char_info = CHARACTER_INFO.get(self.character_name, {})
-                
-                # 모드별 설정 (이모지, 색상, 이미지, 턴 제한)
-                mode_config = {
-                    "romantic": {
-                        "emoji": "💕",
-                        "color": discord.Color.pink(),
-                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/c742a172-bdf3-4e97-2a80-1f5b7a100a00/public",
-                        "turns": 50,
-                        "description": "Love and romance scenarios"
-                    },
-                    "friendship": {
-                        "emoji": "👥",
-                        "color": discord.Color.blue(),
-                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/1e48be9b-ecd4-4936-6fb4-955fd444ac00/public",
-                        "turns": 50,
-                        "description": "Friendly and supportive interactions"
-                    },
-                    "healing": {
-                        "emoji": "🕊️",
-                        "color": discord.Color.green(),
-                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/5686b751-2d47-4084-6f76-8672282f7e00/public",
-                        "turns": 50,
-                        "description": "Comforting and therapeutic conversations"
-                    },
-                    "fantasy": {
-                        "emoji": "⚔️",
-                        "color": discord.Color.purple(),
-                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/b3aa214f-7736-43ea-64b4-9e749f09b500/public",
-                        "turns": 50,
-                        "description": "Adventure and fantasy scenarios"
-                    },
-                    "custom": {
-                        "emoji": "✨",
-                        "color": discord.Color.gold(),
-                        "image": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/bf6bb51e-f5fd-4e3b-d5b0-8b04deb3f800/public",
-                        "turns": 50,
-                        "description": "Your unique scenario"
-                    }
-                }
-                
-                current_mode = self.mode.value.lower()
-                mode_info = mode_config.get(current_mode, mode_config["custom"])
-                turns_limit = mode_info["turns"]
-                
-                embed = discord.Embed(
-                    title=f"🎭 Roleplay Session with {self.character_name} Begins! 🎭",
-                    description=(
-                        f"🎬 **Roleplay Scenario** 🎬\n"
-                        f"**Mode:** {mode_info['emoji']} {self.mode.value.title()}\n"
-                        f"**Your Role:** `{self.user_role.value}`\n"
-                        f"**{self.character_name}'s Role:** `{self.character_role.value}`\n"
-                        f"**Story/Situation:**\n> {self.story_line.value}\n\n"
-                        f"✨ {self.character_name} will now act according to their role and personality in this scenario! ✨\n"
-                        f"💬 Enjoy **{turns_limit} turns** of immersive roleplay conversation.\n"
-                        f"📊 **Turns Remaining:** {turns_limit}/100"
-                    ),
-                    color=mode_info["color"]
-                )
-                
-                # 모드별 이미지 설정
-                mode_image = mode_info["image"]
-                embed.set_image(url=mode_image)
-                
-                # 캐릭터 썸네일 설정
-                icon_url = char_info.get('image') if char_info.get('image') else "https://i.postimg.cc/BZTJr9Np/ec6047e888811f61cc4b896a4c3dd22e.gif"
-                embed.set_thumbnail(url=icon_url)
-                
-                embed.set_footer(text=f"🎭 {mode_info['description']} • ZeroLink Roleplay Mode")
-                await channel.send(embed=embed)
-
-                # 4. Send notification message to existing channel
-                rp_link = f"https://discord.com/channels/{guild.id}/{channel.id}"
-                await interaction.response.send_message(
-                    f"✨ A new roleplay mode has started! [Click here to join your special channel]({rp_link})",
-                    ephemeral=True
+                # Use RoleplayManager to create the session
+                await bot_selector.roleplay_manager.create_roleplay_session(
+                    interaction, self.character_name, self.mode.value.lower(),
+                    self.user_role.value, self.character_role.value, self.story_line.value
                 )
 
             except Exception as e:
@@ -5939,9 +5824,9 @@ class BotSelector(commands.Bot):
 
         # 롤플레잉 채널 처리
         if message.channel.name.startswith("rp-"):
-            session = self.roleplay_sessions.get(message.channel.id)
+            session = self.roleplay_manager.get_session(message.channel.id)
             if session and session.get("is_active"):
-                await self.process_roleplay_message(message, session)
+                await self.roleplay_manager.process_roleplay_message(message, session)
             return
 
         # 일반 채널에서의 기본 채팅 처리
@@ -6341,8 +6226,8 @@ class BotSelector(commands.Bot):
         
         return f"Develop the story in {mode} mode while staying true to {character_name}'s character and the established scenario."
 
-    # 롤플레잉 모드 전용 답장 함수
-    async def process_roleplay_message(self, message, session):
+    # 롤플레잉 모드 전용 답장 함수 (RoleplayManager로 이동됨)
+    async def _old_process_roleplay_message(self, message, session):
         import asyncio
         import discord
         import re
