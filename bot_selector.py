@@ -4088,8 +4088,8 @@ class BotSelector(commands.Bot):
                     if interaction.channel.id in bot.active_channels:
                         current_bot = bot
                         break
-                    # 2. 채널 이름 규칙으로도 판별 (예: kagari-유저이름)
-                    if interaction.channel.name.startswith(char_name.lower() + "-"):
+                    # 2. 채널 이름 규칙으로도 판별 (chat-char_name-유저이름)
+                    if interaction.channel.name.startswith(f"chat-{char_name.lower()}-"):
                         current_bot = bot
                         break
                 if not current_bot:
@@ -6530,8 +6530,14 @@ class BotSelector(commands.Bot):
         # 활성화된 채널 목록에서 제거
         for bot in self.character_bots.values():
             bot.remove_channel(channel_id)
-        if hasattr(self, 'remove_channel'):
-            self.remove_channel(channel_id)
+        
+        # BotSelector의 active_channels에서 제거
+        if channel_id in self.active_channels:
+            del self.active_channels[channel_id]
+        
+        # 활동 시간 기록에서도 제거
+        if channel_id in self.channel_last_activity:
+            del self.channel_last_activity[channel_id]
 
     async def handle_dm_message(self, message: discord.Message):
         """DM에서의 메시지를 처리합니다."""
