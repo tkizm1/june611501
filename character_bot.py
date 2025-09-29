@@ -738,15 +738,23 @@ class CharacterBot(commands.Bot):
             print(f"[DEBUG] Selected card {card_id} from {len(available_cards)} available cards for {character} tier {chosen_tier}")
 
             # 카드 지급 (CardClaimView 사용) - 미리 저장하지 않고 버튼 클릭 시 저장
-            from config import CHARACTER_CARD_INFO
-            card_info = CHARACTER_CARD_INFO[character][card_id]
+            from config import get_card_info_by_id
+            card_info = get_card_info_by_id(character, card_id)
+            print(f"[DEBUG] 카드 정보: {card_info}")
+            
             embed = discord.Embed(
                 title="🎉 New Card Unlocked!",
                 description=f"You've reached a new milestone with {character} and received a special card!\nClick the button to claim it.",
                 color=discord.Color.gold()
             )
-            if card_info.get("image_path"):
-                embed.set_image(url=card_info["image_path"])
+            
+            # 이미지 URL 설정 - get_card_info_by_id에서 이미 올바른 image_url을 설정함
+            if card_info.get("image_url"):
+                embed.set_image(url=card_info["image_url"])
+                print(f"[DEBUG] 카드 이미지 설정: {card_info['image_url']}")
+            else:
+                print(f"[DEBUG] 카드 이미지 URL 없음: {card_info}")
+                
             view = CardClaimView(user_id, card_id, character, self.db)
             await message.channel.send(embed=embed, view=view)
             
@@ -1674,15 +1682,16 @@ class CardClaimView(discord.ui.View):
                 await interaction.followup.send("An error occurred while claiming the card. Please try again.", ephemeral=True)
 
 def get_card_claim_embed_and_view(user_id, character_name, card_id, db):
-    from config import CHARACTER_CARD_INFO
-    card_info = CHARACTER_CARD_INFO[character_name][card_id]
+    from config import get_card_info_by_id
+    card_info = get_card_info_by_id(character_name, card_id)
     embed = discord.Embed(
         title=f" {character_name} {card_id} Card",
         description=card_info.get("description", ""),
         color=discord.Color.gold()
     )
-    if card_info.get("image_path"):
-        embed.set_image(url=card_info.get("image_path"))
+    # 이미지 URL 설정 - get_card_info_by_id에서 이미 올바른 image_url을 설정함
+    if card_info.get("image_url"):
+        embed.set_image(url=card_info["image_url"])
     view = CardClaimView(user_id, character_name, card_id, db)
     return embed, view
 

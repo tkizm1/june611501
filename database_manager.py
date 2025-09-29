@@ -520,6 +520,8 @@ class DatabaseManager:
 
     def add_user_card(self, user_id: int, character_name: str, card_id: str, acquired_at: datetime = None) -> bool:
         """사용자에게 카드를 추가합니다. 이미 보유한 카드는 추가하지 않습니다."""
+        print(f"[DEBUG] add_user_card 호출: user_id={user_id}, character_name={character_name}, card_id={card_id}, acquired_at={acquired_at}")
+        
         conn = None
         try:
             conn = self.get_connection()
@@ -2106,12 +2108,28 @@ class DatabaseManager:
             with conn.cursor() as cursor:
                 # CST 시간대 기준으로 오늘 카드 획득 수 계산 (다른 데일리 퀘스트와 동일한 방식)
                 today_cst = get_today_cst()
+                print(f"[DEBUG] get_user_daily_card_count - user_id={user_id}, today_cst={today_cst}")
+                
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
                     WHERE user_id = %s 
                     AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
-                return cursor.fetchone()[0]
+                
+                count = cursor.fetchone()[0]
+                print(f"[DEBUG] get_user_daily_card_count - result: {count}")
+                
+                # 디버깅을 위해 오늘 획득한 카드들도 조회
+                cursor.execute("""
+                    SELECT card_id, character_name, acquired_at FROM user_cards 
+                    WHERE user_id = %s 
+                    AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
+                """, (user_id, today_cst))
+                
+                today_cards = cursor.fetchall()
+                print(f"[DEBUG] get_user_daily_card_count - today's cards: {today_cards}")
+                
+                return count
     
     def get_abnormal_activity_detection(self) -> dict:
         """이상 상황을 감지합니다."""

@@ -486,13 +486,6 @@ class ErosChapter3CulpritSelectView(discord.ui.View):
             reward_text = ""
             if rewards['type'] == 'specific_card':
                 self.bot.db.add_user_card(self.session['user_id'], rewards['card'], 1)
-                # 퀘스트 진행률 업데이트 트리거
-                try:
-                    from bot_selector import BotSelector
-                    bot_selector = BotSelector()
-                    bot_selector.trigger_card_quest_completion(self.session['user_id'], self.session['character'])
-                except Exception as e:
-                    print(f"Error triggering quest completion: {e}")
                 reward_text = f"**Reward:** {rewards['rarity']} Card **{rewards['card']}**\nCheck your cards with `/cards`!"
             else:
                 reward_text = "Reward processed."
@@ -523,14 +516,6 @@ class ErosChapter3CulpritSelectView(discord.ui.View):
                     try:
                         success = self.bot.db.add_user_card(self.user_id, "Eros", self.card_id)
                         if success:
-                            # 퀘스트 진행률 업데이트 트리거
-                            try:
-                                from bot_selector import BotSelector
-                                bot_selector = BotSelector()
-                                bot_selector.trigger_card_quest_completion(self.user_id, "Eros")
-                            except Exception as e:
-                                print(f"Error triggering quest completion: {e}")
-                            
                             self.claimed = True
                             # 버튼 비활성화 및 텍스트 변경
                             button.disabled = True
@@ -562,11 +547,12 @@ class ErosChapter3CulpritSelectView(discord.ui.View):
                 description=f"You have earned the special card: **{rewards['card']}**!",
                 color=discord.Color.gold()
             )
-            from config import CHARACTER_CARD_INFO
+            from config import get_card_info_by_id
             card_id = rewards['card']
-            card_image_url = CHARACTER_CARD_INFO["Eros"].get(card_id, {}).get("image_url")
-            if card_image_url:
-                card_embed.set_image(url=card_image_url)
+            card_info = get_card_info_by_id("Eros", card_id)
+            # 이미지 URL 설정 - get_card_info_by_id에서 이미 올바른 image_url을 설정함
+            if card_info.get("image_url"):
+                card_embed.set_image(url=card_info["image_url"])
             card_embed.set_footer(text="Press the button below to claim your card!")
             await interaction.message.edit(view=self)
             await interaction.followup.send(embed=success_embed)
@@ -910,13 +896,6 @@ async def handle_chapter3_gift_usage(bot: "BotSelector", user_id: int, character
 
     # 카드 보상 지급
     bot.db.add_user_card(user_id, character_name, reward_card)
-    # 퀘스트 진행률 업데이트 트리거
-    try:
-        from bot_selector import BotSelector
-        bot_selector = BotSelector()
-        bot_selector.trigger_card_quest_completion(user_id, character_name)
-    except Exception as e:
-        print(f"Error triggering quest completion: {e}")
     print(f"[DEBUG] Card added to user: {reward_card}")
 
     # 스토리 완료 처리
