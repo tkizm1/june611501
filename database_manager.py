@@ -1211,6 +1211,11 @@ class DatabaseManager:
                 """, (user_id, today_cst, character_name, card_id))
             conn.commit()
             print(f"[DEBUG] record_card_share - 성공적으로 기록됨")
+            
+            # 기록 후 즉시 확인
+            shared_count = self.get_card_shared_this_week(user_id)
+            print(f"[DEBUG] record_card_share - 기록 후 주간 공유 횟수: {shared_count}")
+            
         except Exception as e:
             print(f"[ERROR] record_card_share 실패: {e}")
             if conn: conn.rollback()
@@ -1226,8 +1231,9 @@ class DatabaseManager:
             conn = self.get_connection()
             with conn.cursor() as cursor:
                 today_cst = get_today_cst()
+                # 주간 범위 계산 수정: 월요일부터 일요일까지
                 start_of_week = today_cst - timedelta(days=today_cst.weekday())
-                end_of_week = start_of_week + timedelta(days=6)
+                end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
                 
                 print(f"[DEBUG] get_card_shared_this_week - 사용자: {user_id}, 이번 주: {start_of_week} ~ {end_of_week}")
                 
@@ -1533,12 +1539,12 @@ class DatabaseManager:
         """이번 주(월~일) 내에 해당 퀘스트 보상을 이미 수령했는지 확인합니다."""
         today = get_today_cst()
         start_of_week = today - timedelta(days=today.weekday())  # 월요일
-        end_of_week = start_of_week + timedelta(days=7)
+        end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59)  # 일요일 끝
         conn = self.get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT 1 FROM quest_claims WHERE user_id = %s AND quest_id = %s AND claimed_at >= %s AND claimed_at < %s",
+                    "SELECT 1 FROM quest_claims WHERE user_id = %s AND quest_id = %s AND claimed_at >= %s AND claimed_at <= %s",
                     (user_id, quest_id, start_of_week, end_of_week)
                 )
                 return cursor.fetchone() is not None

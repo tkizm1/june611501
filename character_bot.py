@@ -755,7 +755,7 @@ class CharacterBot(commands.Bot):
             else:
                 print(f"[DEBUG] 카드 이미지 URL 없음: {card_info}")
                 
-            view = CardClaimView(user_id, card_id, character, self.db)
+            view = CardClaimView(user_id, character, card_id, self.db)
             await message.channel.send(embed=embed, view=view)
             
             print(f"[DEBUG] 카드 발급 완료: {card_id}")
