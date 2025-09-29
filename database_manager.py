@@ -1260,10 +1260,12 @@ class DatabaseManager:
                 
                 print(f"[DEBUG] get_card_shared_this_week - 사용자: {user_id}, 이번 주: {start_of_week} ~ {end_of_week}")
                 
+                # date 객체를 문자열로 변환하여 비교
                 cursor.execute(
                     """
                     SELECT COUNT(*) FROM user_quest_events
-                    WHERE user_id = %s AND event_type = 'card_share' AND event_date BETWEEN %s AND %s
+                    WHERE user_id = %s AND event_type = 'card_share' 
+                    AND event_date >= %s AND event_date <= %s
                     """,
                     (user_id, start_of_week, end_of_week)
                 )
@@ -2139,6 +2141,7 @@ class DatabaseManager:
                 today_cst = get_today_cst()
                 print(f"[DEBUG] get_user_daily_card_count - user_id={user_id}, today_cst={today_cst}")
                 
+                # 더 간단하고 일관된 방식으로 날짜 비교
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
                     WHERE user_id = %s 

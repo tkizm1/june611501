@@ -6348,15 +6348,21 @@ class BotSelector(commands.Bot):
             # 랜덤 카드 획득 체크
             card_type, card_id = self.get_random_card(character_name, user_id)
             if card_id:
-                card_info = get_card_info_by_id(character_name, card_id)
-                if card_info:
-                    embed = discord.Embed(
-                        title="🎉 New Card Acquired!",
-                        description=f"**{card_info['name']}**\n{card_info['description']}",
-                        color=0x00ff00
-                    )
-                    embed.set_thumbnail(url=card_info['image_url'])
-                    await message.channel.send(embed=embed)
+                # 카드를 실제로 데이터베이스에 추가
+                success = self.db.add_user_card(user_id, character_name, card_id)
+                if success:
+                    card_info = get_card_info_by_id(character_name, card_id)
+                    if card_info:
+                        embed = discord.Embed(
+                            title="🎉 New Card Acquired!",
+                            description=f"**{card_info['name']}**\n{card_info['description']}",
+                            color=0x00ff00
+                        )
+                        embed.set_thumbnail(url=card_info['image_url'])
+                        await message.channel.send(embed=embed)
+                        print(f"[DEBUG] 카드 획득 성공 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
+                else:
+                    print(f"[ERROR] 카드 획득 실패 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
             
         except Exception as e:
             print(f"Error in handle_dm_message: {e}")
