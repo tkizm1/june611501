@@ -2229,9 +2229,44 @@ class DatabaseManager:
                 """, (user_id, limit))
                 return cursor.fetchall()
     
+    def _ensure_user_settings_table(self):
+        """user_settings 테이블이 존재하는지 확인하고 없으면 생성합니다."""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # 테이블 존재 여부 확인
+                    cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_name = 'user_settings'
+                        )
+                    """)
+                    table_exists = cursor.fetchone()[0]
+                    
+                    if not table_exists:
+                        print("[INFO] user_settings 테이블이 존재하지 않아 생성합니다...")
+                        cursor.execute("""
+                            CREATE TABLE user_settings (
+                                id SERIAL PRIMARY KEY,
+                                user_id BIGINT NOT NULL,
+                                setting_key VARCHAR(100) NOT NULL,
+                                setting_value TEXT NOT NULL,
+                                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                                UNIQUE(user_id, setting_key)
+                            )
+                        """)
+                        conn.commit()
+                        print("[INFO] user_settings 테이블이 성공적으로 생성되었습니다.")
+        except Exception as e:
+            print(f"[ERROR] user_settings 테이블 생성 중 오류: {e}")
+
     async def set_user_timezone(self, user_id: int, timezone: str) -> bool:
         """사용자의 시간대를 설정합니다."""
         try:
+            # 테이블 존재 여부 확인 및 생성
+            self._ensure_user_settings_table()
+            
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
@@ -2249,6 +2284,9 @@ class DatabaseManager:
     async def get_user_timezone(self, user_id: int) -> str:
         """사용자의 시간대를 가져옵니다."""
         try:
+            # 테이블 존재 여부 확인 및 생성
+            self._ensure_user_settings_table()
+            
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
