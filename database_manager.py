@@ -1216,9 +1216,32 @@ class DatabaseManager:
             shared_count = self.get_card_shared_this_week(user_id)
             print(f"[DEBUG] record_card_share - 기록 후 주간 공유 횟수: {shared_count}")
             
+            # 추가 디버깅: 실제 DB에서 확인
+            self.debug_card_share_events(user_id)
+            
         except Exception as e:
             print(f"[ERROR] record_card_share 실패: {e}")
             if conn: conn.rollback()
+        finally:
+            self.return_connection(conn)
+
+    def debug_card_share_events(self, user_id: int):
+        """카드 공유 이벤트 디버깅용 함수"""
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT event_date, character_name, card_id 
+                    FROM user_quest_events 
+                    WHERE user_id = %s AND event_type = 'card_share' 
+                    ORDER BY event_date DESC 
+                    LIMIT 5
+                """, (user_id,))
+                events = cursor.fetchall()
+                print(f"[DEBUG] debug_card_share_events - 최근 카드 공유 이벤트: {events}")
+        except Exception as e:
+            print(f"[ERROR] debug_card_share_events 실패: {e}")
         finally:
             self.return_connection(conn)
 
@@ -1231,9 +1254,9 @@ class DatabaseManager:
             conn = self.get_connection()
             with conn.cursor() as cursor:
                 today_cst = get_today_cst()
-                # 주간 범위 계산 수정: 월요일부터 일요일까지
+                # 주간 범위 계산 수정: date 타입으로 계산
                 start_of_week = today_cst - timedelta(days=today_cst.weekday())
-                end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
+                end_of_week = start_of_week + timedelta(days=6)
                 
                 print(f"[DEBUG] get_card_shared_this_week - 사용자: {user_id}, 이번 주: {start_of_week} ~ {end_of_week}")
                 
