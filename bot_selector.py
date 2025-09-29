@@ -4094,6 +4094,41 @@ class BotSelector(commands.Bot):
                 print(f"Error in /roleplay: {e}")
                 await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
 
+        @self.tree.command(
+            name="end-roleplay",
+            description="End the current roleplay session"
+        )
+        async def end_roleplay_command(interaction: discord.Interaction):
+            """현재 롤플레잉 세션을 종료합니다."""
+            try:
+                channel_id = interaction.channel.id
+                
+                # 롤플레잉 세션 확인
+                session = self.roleplay_manager.get_session(channel_id)
+                if not session or not session.get("is_active"):
+                    await interaction.response.send_message("❌ 활성화된 롤플레잉 세션이 없습니다.", ephemeral=True)
+                    return
+                
+                character_name = session.get("character_name", "Unknown")
+                mode = session.get("mode", "romantic")
+                turn_count = session.get("turn_count", 0)
+                max_turns = session.get("max_turns", 50)
+                
+                # 세션 종료 처리
+                await self.roleplay_manager._end_roleplay_session(interaction, session, character_name, max_turns)
+                
+                await interaction.response.send_message(
+                    f"🎭 롤플레잉 세션이 종료되었습니다!\n"
+                    f"**캐릭터:** {character_name}\n"
+                    f"**모드:** {mode.title()}\n"
+                    f"**진행 턴:** {turn_count}/{max_turns}",
+                    ephemeral=True
+                )
+                
+            except Exception as e:
+                print(f"Error in /end-roleplay: {e}")
+                await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
+
         # --- 인벤토리 및 선물 명령어 통합 ---
 
         @self.tree.command(name="inventory", description="Check your gift inventory.")

@@ -2311,16 +2311,16 @@ class DatabaseManager:
 
     # === 롤플레잉 관련 메서드들 ===
     
-    def create_roleplay_session(self, session_id, user_id, character_name, mode, user_role, character_role, story_line):
+    def create_roleplay_session(self, session_id, user_id, character_name, mode, user_role, character_role, story_line, channel_id=None, turn_count=0):
         """롤플레잉 세션을 생성합니다."""
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
                         INSERT INTO roleplay_sessions 
-                        (session_id, user_id, character_name, mode, user_role, character_role, story_line)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (session_id, user_id, character_name, mode, user_role, character_role, story_line))
+                        (session_id, user_id, character_name, mode, user_role, character_role, story_line, channel_id, turn_count)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (session_id, user_id, character_name, mode, user_role, character_role, story_line, channel_id, turn_count))
                     conn.commit()
                     return True
         except Exception as e:

@@ -44,20 +44,20 @@ class RoleplayManager:
             try:
                 if hasattr(self.bot_selector, 'db') and self.bot_selector.db:
                     print(f"[DEBUG] Attempting to create roleplay session in database...")
-                    db_session_id = self.bot_selector.db.create_roleplay_session(
+                    db_success = self.bot_selector.db.create_roleplay_session(
+                        session_id,
                         interaction.user.id,
                         character_name,
                         mode,
                         user_role,
                         character_role,
                         story_line,
-                        channel.id
+                        channel.id,
+                        0  # turn_count
                     )
-                    print(f"[DEBUG] create_roleplay_session returned: {db_session_id}")
-                    if db_session_id:
-                        print(f"[DEBUG] Roleplay session saved to database: {db_session_id}")
-                        session_id = db_session_id
-                        db_success = True
+                    print(f"[DEBUG] create_roleplay_session returned: {db_success}")
+                    if db_success:
+                        print(f"[DEBUG] Roleplay session saved to database: {session_id}")
                     else:
                         print(f"[DEBUG] Failed to save roleplay session to database, but continuing with local session")
                 else:
@@ -342,10 +342,12 @@ class RoleplayManager:
                     # 캐릭터 이름이 없는 경우 추가
                     ai_response = f"The scene unfolds naturally as the moment develops.\n__________________\n{character_name}: {ai_response.strip()}"
 
-            # (n/100) 중복 방지
-            ai_response = re.sub(r"(\(\d{1,2}/100\))(?=.*\(\d{1,2}/100\))", "", ai_response)
-            if not re.search(r"\(\d{1,2}/100\)", ai_response):
-                ai_response = f"{ai_response} {turn_str}"
+            # 턴 카운트 중복 방지 (정규식으로 모든 (n/max_turns) 패턴 제거 후 하나만 추가)
+            pattern = r"\(\d{1,3}/\d{1,3}\)"
+            ai_response = re.sub(pattern, "", ai_response).strip()
+            
+            # 턴 카운트 추가
+            ai_response = f"{ai_response} {turn_str}"
 
             await message.channel.send(ai_response)
             session["history"].append({"role": "assistant", "content": ai_response})
@@ -364,8 +366,17 @@ class RoleplayManager:
             print(traceback.format_exc())
             await message.channel.send(f"❌ 메시지 처리 중 오류가 발생했습니다: {str(e)}")
 
-    async def _end_roleplay_session(self, message: discord.Message, session: Dict[str, Any], character_name: str, max_turns: int):
+    async def _end_roleplay_session(self, message_or_interaction, session: Dict[str, Any], character_name: str, max_turns: int):
         """롤플레잉 세션을 종료합니다."""
+        # message 또는 interaction 객체에서 채널 가져오기
+        if hasattr(message_or_interaction, 'channel'):
+            channel = message_or_interaction.channel
+        elif hasattr(message_or_interaction, 'channel'):
+            channel = message_or_interaction.channel
+        else:
+            print("Error: Invalid message_or_interaction object")
+            return
+            
         mode = session.get("mode", "romantic")
         ending_messages = {
             "romantic": "💕 **Romantic Journey Complete** 💕\n\nYour love story has reached its beautiful conclusion! The confession has been made, promises have been shared, and your hearts are forever connected.\n\n*'Every love story is beautiful, but ours is my favorite.'*",
@@ -388,7 +399,7 @@ class RoleplayManager:
             value=f"**{mode.title()} Mode Complete** quest has been completed!\nCheck your quests with `/quest` to claim your reward!",
             inline=False
         )
-        await message.channel.send(embed=embed)
+        await channel.send(embed=embed)
         
         # 데이터베이스 세션 종료
         session_id = session.get("session_id")
@@ -396,14 +407,14 @@ class RoleplayManager:
             self.bot_selector.db.end_roleplay_session(session_id)
         
         # 세션 정리
-        if message.channel.id in self.roleplay_sessions:
-            del self.roleplay_sessions[message.channel.id]
+        if channel.id in self.roleplay_sessions:
+            del self.roleplay_sessions[channel.id]
         
         # 10초 후 채널 삭제
         import asyncio
         await asyncio.sleep(10)
         try:
-            await message.channel.delete()
+            await channel.delete()
             print(f"[DEBUG][Roleplay] 100턴 완료 후 채널 삭제 완료")
         except Exception as e:
             print(f"[DEBUG][Roleplay] 100턴 완료 후 채널 삭제 실패: {e}")

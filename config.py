@@ -1608,10 +1608,10 @@ for idx, customer in enumerate(STORY_CHAPTERS["Eros"]["chapters"][0]["customers"
 
 # 롤플레잉 모드별 이미지 설정
 ROLEPLAY_MODE_IMAGES = {
-    "romantic": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/c742a172-bdf3-4e97-2a80-1f5b7a100a00/public",
-    "friendship": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/1e48be9b-ecd4-4936-6fb4-955fd444ac00/public", 
-    "healing": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/5686b751-2d47-4084-6f76-8672282f7e00/public",
-    "fantasy": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/b3aa214f-7736-43ea-64b4-9e749f09b500/public",
-    "custom": "https://imagedelivery.net/0ab1cb39-5366-496e-2d24-97fd069d2700/bf6bb51e-f5fd-4e3b-d5b0-8b04deb3f800/public"
+    "romantic": "https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/c742a172-bdf3-4e97-2a80-1f5b7a100a00/public",
+    "friendship": "https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/1e48be9b-ecd4-4936-6fb4-955fd444ac00/public", 
+    "healing": "https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/5686b751-2d47-4084-6f76-8672282f7e00/public",
+    "fantasy": "https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/b3aa214f-7736-43ea-64b4-9e749f09b500/public",
+    "custom": "https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/bf6bb51e-f5fd-4e3b-d5b0-8b04deb3f800/public"
 }
 
