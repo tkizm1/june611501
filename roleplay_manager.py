@@ -356,8 +356,8 @@ class RoleplayManager:
             if session_id and hasattr(self.bot_selector, 'db') and self.bot_selector.db:
                 self.bot_selector.db.save_roleplay_message(session_id, message.content, ai_response, session["turn_count"])
 
-            # 100턴 종료 처리
-            if session["turn_count"] >= 100:
+            # 50턴 종료 처리
+            if session["turn_count"] >= max_turns:
                 await self._end_roleplay_session(message, session, character_name, max_turns)
 
         except Exception as e:
@@ -389,7 +389,7 @@ class RoleplayManager:
         
         embed = discord.Embed(
             title="🎭 Roleplay Session Complete! 🎭",
-            description=f"{ending_message}\n\n**Mode:** {mode.title()}\n**Character:** {character_name}\n**Turns:** {max_turns}/{max_turns}\n\nThank you for this amazing journey together! 💫\n\n⏰ This channel will be automatically deleted in 10 seconds.",
+            description=f"{ending_message}\n\n**Mode:** {mode.title()}\n**Character:** {character_name}\n**Turns:** {max_turns}/{max_turns}\n\nThank you for this amazing journey together! 💫\n\n⏰ This channel will be automatically deleted in 3 seconds.",
             color=discord.Color.pink()
         )
         
@@ -410,14 +410,14 @@ class RoleplayManager:
         if channel.id in self.roleplay_sessions:
             del self.roleplay_sessions[channel.id]
         
-        # 10초 후 채널 삭제
+        # 3초 후 채널 삭제
         import asyncio
-        await asyncio.sleep(10)
+        await asyncio.sleep(3)
         try:
             await channel.delete()
-            print(f"[DEBUG][Roleplay] 100턴 완료 후 채널 삭제 완료")
+            print(f"[DEBUG][Roleplay] 50턴 완료 후 채널 삭제 완료")
         except Exception as e:
-            print(f"[DEBUG][Roleplay] 100턴 완료 후 채널 삭제 실패: {e}")
+            print(f"[DEBUG][Roleplay] 50턴 완료 후 채널 삭제 실패: {e}")
 
     def _get_character_traits(self) -> Dict[str, Dict[str, str]]:
         """캐릭터별 특성을 반환합니다."""

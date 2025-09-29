@@ -848,6 +848,7 @@ class BotSelector(commands.Bot):
         self.story_sessions = {}
         self.dm_sessions = {}  # DM 세션 관리
         self.roleplay_manager = RoleplayManager(self)  # 롤플레잉 매니저 초기화
+        self.channel_last_activity = {}  # 채널별 마지막 활동 시간 추적
         
         # Admin-only channel settings
         self.admin_channels = set()  # Channel IDs allowed for admin commands
@@ -994,6 +995,67 @@ class BotSelector(commands.Bot):
         
         # 자동 블랙리스트 정리 작업 시작
         asyncio.create_task(self.blacklist_cleanup_task())
+        
+        # 자동 채널 삭제 작업 시작
+        asyncio.create_task(self.auto_channel_deletion_task())
+
+    async def auto_channel_deletion_task(self):
+        """자동 채널 삭제 작업 (1분마다 실행)"""
+        while True:
+            try:
+                await asyncio.sleep(60)  # 1분마다 체크
+                await self.check_inactive_channels()
+            except Exception as e:
+                print(f"Error in auto channel deletion task: {e}")
+                await asyncio.sleep(60)
+
+    async def check_inactive_channels(self):
+        """비활성 채널을 확인하고 삭제합니다."""
+        import time
+        current_time = time.time()
+        inactive_threshold = 180  # 3분 = 180초
+        
+        channels_to_delete = []
+        
+        # 모든 캐릭터 봇의 active_channels 확인
+        for char_name, bot in self.character_bots.items():
+            for channel_id, channel_data in bot.active_channels.items():
+                last_activity = self.channel_last_activity.get(channel_id, current_time)
+                
+                # 3분 이상 비활성 상태인 채널 찾기
+                if current_time - last_activity > inactive_threshold:
+                    channels_to_delete.append((channel_id, char_name))
+        
+        # 비활성 채널 삭제
+        for channel_id, char_name in channels_to_delete:
+            try:
+                channel = self.get_channel(channel_id)
+                if channel:
+                    # 마지막 메시지 전송
+                    embed = discord.Embed(
+                        title="⏰ Chat Session Timeout",
+                        description="This chat channel will be deleted due to inactivity (3 minutes).\nThank you for chatting!",
+                        color=discord.Color.orange()
+                    )
+                    await channel.send(embed=embed)
+                    
+                    # 잠시 대기 후 채널 삭제
+                    await asyncio.sleep(2)
+                    await channel.delete()
+                    
+                    # 봇에서 채널 제거
+                    bot = self.character_bots.get(char_name)
+                    if bot:
+                        bot.remove_channel(channel_id)
+                    
+                    # 활동 시간 기록에서 제거
+                    if channel_id in self.channel_last_activity:
+                        del self.channel_last_activity[channel_id]
+                    
+                    print(f"[DEBUG] Auto-deleted inactive channel: {channel_id} ({char_name})")
+                    
+            except Exception as e:
+                print(f"Error deleting inactive channel {channel_id}: {e}")
 
     async def blacklist_cleanup_task(self):
         """자동 블랙리스트 정리 작업 (매 시간마다 실행)"""
@@ -3373,16 +3435,40 @@ class BotSelector(commands.Bot):
                     print(f"[DEBUG] {char_name} active_channels: {getattr(bot, 'active_channels', None)}")
                 # ====== 디버깅 로그 추가 끝 ======
 
-                if not channel.category or channel.category.name.lower() != "chatbot":
-                    await interaction.response.send_message("This command can only be used in character chat channels.", ephemeral=True)
+                # 채널명으로 캐릭터 채팅 채널 또는 롤플레잉 채널인지 확인
+                is_character_chat = False
+                is_roleplay_channel = False
+                
+                # 롤플레잉 채널 확인
+                if channel.name.startswith("rp-"):
+                    is_roleplay_channel = True
+                else:
+                    # 캐릭터 채팅 채널 확인
+                    for char_name in self.character_bots.keys():
+                        if channel.name.startswith(f"chat-{char_name.lower()}-"):
+                            is_character_chat = True
+                            break
+                
+                if not is_character_chat and not is_roleplay_channel:
+                    await interaction.response.send_message("This command can only be used in character chat channels or roleplay channels.", ephemeral=True)
                     return
+                
+                # 롤플레잉 세션이 있는지 확인
+                roleplay_session = None
+                if is_roleplay_channel:
+                    roleplay_session = self.roleplay_manager.get_session(channel.id)
 
                 # 권한 체크
                 can_delete = False
                 try:
                     if interaction.user.guild_permissions.manage_channels or interaction.user.id == interaction.guild.owner_id:
                         can_delete = True
+                    elif is_roleplay_channel and roleplay_session:
+                        # 롤플레잉 채널의 경우 세션 생성자만 삭제 가능
+                        if roleplay_session.get("user_id") == interaction.user.id:
+                            can_delete = True
                     else:
+                        # 일반 채팅 채널의 경우 채널명으로 권한 확인
                         channel_name_parts = channel.name.split('-')
                         if len(channel_name_parts) > 1 and channel_name_parts[-1] == interaction.user.name.lower():
                             can_delete = True
@@ -3394,11 +3480,19 @@ class BotSelector(commands.Bot):
                     await interaction.response.send_message("You don't have permission to delete this channel.", ephemeral=True)
                     return
 
-                # 캐릭터 봇에서 채널 제거
-                for bot in self.character_bots.values():
-                    bot.remove_channel(channel.id)
-                if hasattr(self, 'remove_channel'):
-                    self.remove_channel(channel.id)
+                # 롤플레잉 세션이 있으면 먼저 종료 처리
+                if roleplay_session and roleplay_session.get("is_active"):
+                    character_name = roleplay_session.get("character_name", "Unknown")
+                    max_turns = roleplay_session.get("max_turns", 50)
+                    await self.roleplay_manager._end_roleplay_session(interaction, roleplay_session, character_name, max_turns)
+                    return
+
+                # 일반 채팅 채널의 경우 캐릭터 봇에서 채널 제거
+                if is_character_chat:
+                    for bot in self.character_bots.values():
+                        bot.remove_channel(channel.id)
+                    if hasattr(self, 'remove_channel'):
+                        self.remove_channel(channel.id)
 
                 # 응답 전송 후 채널 삭제 (중복 응답 방지)
                 if not interaction.response.is_done():
@@ -4020,37 +4114,37 @@ class BotSelector(commands.Bot):
                     if interaction.channel.id in bot.active_channels:
                         current_bot = bot
                         break
-                    # 2. 채널 이름 규칙으로도 판별 (예: kagari-유저이름)
-                    if interaction.channel.name.startswith(char_name.lower() + "-"):
+                    # 2. 채널 이름 규칙으로도 판별 (chat-char_name-유저이름)
+                    if interaction.channel.name.startswith(f"chat-{char_name.lower()}-"):
                         current_bot = bot
                         break
                 if not current_bot:
                     await interaction.response.send_message("This command is only available in character chat channels.", ephemeral=True)
                     return
 
-                # 2. 호감도 체크 (Silver 이상만 허용)
+                # 2. 호감도 체크 (호감도 20 이상만 허용)
                 affinity_info = current_bot.db.get_affinity(interaction.user.id, current_bot.character_name)
                 affinity = affinity_info['emotion_score'] if affinity_info else 0
                 affinity_grade = get_affinity_grade(affinity)
-                if affinity < 50:
+                if affinity < 20:
                     embed = discord.Embed(
                         title="⚠️ Roleplay Mode Locked",
-                        description="Roleplay mode is only available for Silver level users.",
+                        description="Roleplay mode requires at least 20 affinity points.",
                         color=discord.Color.red()
                     )
                     embed.add_field(
-                        name="Current Level",
-                        value=f"**{affinity_grade}**",
+                        name="Current Affinity",
+                        value=f"**{affinity} points**",
                         inline=True
                     )
                     embed.add_field(
-                        name="Required Level",
-                        value="**Silver**",
+                        name="Required Affinity",
+                        value="**20 points**",
                         inline=True
                     )
                     embed.add_field(
                         name="How to Unlock",
-                        value="Keep chatting with the character to increase your affinity level!",
+                        value="Keep chatting with the character to increase your affinity!",
                         inline=False
                     )
                     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -4095,40 +4189,6 @@ class BotSelector(commands.Bot):
                 print(f"Error in /roleplay: {e}")
                 await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
 
-        @self.tree.command(
-            name="end-roleplay",
-            description="End the current roleplay session"
-        )
-        async def end_roleplay_command(interaction: discord.Interaction):
-            """현재 롤플레잉 세션을 종료합니다."""
-            try:
-                channel_id = interaction.channel.id
-                
-                # 롤플레잉 세션 확인
-                session = self.roleplay_manager.get_session(channel_id)
-                if not session or not session.get("is_active"):
-                    await interaction.response.send_message("❌ 활성화된 롤플레잉 세션이 없습니다.", ephemeral=True)
-                    return
-                
-                character_name = session.get("character_name", "Unknown")
-                mode = session.get("mode", "romantic")
-                turn_count = session.get("turn_count", 0)
-                max_turns = session.get("max_turns", 50)
-                
-                # 세션 종료 처리
-                await self.roleplay_manager._end_roleplay_session(interaction, session, character_name, max_turns)
-                
-                await interaction.response.send_message(
-                    f"🎭 롤플레잉 세션이 종료되었습니다!\n"
-                    f"**캐릭터:** {character_name}\n"
-                    f"**모드:** {mode.title()}\n"
-                    f"**진행 턴:** {turn_count}/{max_turns}",
-                    ephemeral=True
-                )
-                
-            except Exception as e:
-                print(f"Error in /end-roleplay: {e}")
-                await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
 
         # --- 인벤토리 및 선물 명령어 통합 ---
 
@@ -5865,6 +5925,11 @@ class BotSelector(commands.Bot):
         # 서버 채널에서의 메시지 처리
         if message.author.bot or not message.guild:
             return
+        
+        # 캐릭터 채팅 채널의 활동 시간 업데이트
+        import time
+        if message.channel.name.startswith("chat-"):
+            self.channel_last_activity[message.channel.id] = time.time()
 
         # --- Story Mode Message Handling ---
         if any(f'-s{i}-' in message.channel.name for i in range(1, 10)):
@@ -6471,8 +6536,14 @@ class BotSelector(commands.Bot):
         # 활성화된 채널 목록에서 제거
         for bot in self.character_bots.values():
             bot.remove_channel(channel_id)
-        if hasattr(self, 'remove_channel'):
-            self.remove_channel(channel_id)
+        
+        # BotSelector의 active_channels에서 제거
+        if channel_id in self.active_channels:
+            del self.active_channels[channel_id]
+        
+        # 활동 시간 기록에서도 제거
+        if channel_id in self.channel_last_activity:
+            del self.channel_last_activity[channel_id]
 
     async def handle_dm_message(self, message: discord.Message):
         """DM에서의 메시지를 처리합니다."""
