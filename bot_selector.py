@@ -1113,71 +1113,19 @@ class BotSelector(commands.Bot):
         asyncio.create_task(self.auto_channel_deletion_task())
 
     async def auto_channel_deletion_task(self):
-        """자동 채널 삭제 작업 (1분마다 실행)"""
-        print("[DEBUG] 자동 채널 삭제 작업이 시작되었습니다.")
+        """자동 채널 삭제 작업을 비활성화합니다."""
+        print("[DEBUG] 자동 채널 삭제 작업이 비활성화되었습니다.")
         while True:
             try:
-                await asyncio.sleep(60)  # 1분마다 체크
-                print("[DEBUG] 자동 채널 삭제 체크 실행 중...")
-                await self.check_inactive_channels()
+                await asyncio.sleep(3600)  # 1시간마다 체크 (실제로는 아무것도 하지 않음)
             except Exception as e:
                 print(f"Error in auto channel deletion task: {e}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(3600)
 
     async def check_inactive_channels(self):
-        """비활성 채널을 확인하고 삭제합니다."""
-        import time
-        current_time = time.time()
-        inactive_threshold = 180  # 3분 = 180초
-        
-        channels_to_delete = []
-        
-        print(f"[DEBUG] 채널 활동 시간 기록: {self.channel_last_activity}")
-        
-        # 모든 캐릭터 봇의 active_channels 확인
-        for char_name, bot in self.character_bots.items():
-            print(f"[DEBUG] {char_name} 봇의 활성 채널: {bot.active_channels}")
-            for channel_id, channel_data in bot.active_channels.items():
-                last_activity = self.channel_last_activity.get(channel_id, current_time)
-                inactive_time = current_time - last_activity
-                
-                print(f"[DEBUG] 채널 {channel_id} 마지막 활동: {inactive_time:.1f}초 전")
-                
-                # 3분 이상 비활성 상태인 채널 찾기
-                if inactive_time > inactive_threshold:
-                    channels_to_delete.append((channel_id, char_name))
-                    print(f"[DEBUG] 삭제 대상 채널 발견: {channel_id} ({char_name})")
-        
-        # 비활성 채널 삭제
-        for channel_id, char_name in channels_to_delete:
-            try:
-                channel = self.get_channel(channel_id)
-                if channel:
-                    # 마지막 메시지 전송
-                    embed = discord.Embed(
-                        title="⏰ Chat Session Timeout",
-                        description="This chat channel will be deleted due to inactivity (3 minutes).\nThank you for chatting!",
-                        color=discord.Color.orange()
-                    )
-                    await channel.send(embed=embed)
-                    
-                    # 잠시 대기 후 채널 삭제
-                    await asyncio.sleep(2)
-                    await channel.delete()
-                    
-                    # 봇에서 채널 제거
-                    bot = self.character_bots.get(char_name)
-                    if bot:
-                        bot.remove_channel(channel_id)
-                    
-                    # 활동 시간 기록에서 제거
-                    if channel_id in self.channel_last_activity:
-                        del self.channel_last_activity[channel_id]
-                    
-                    print(f"[DEBUG] Auto-deleted inactive channel: {channel_id} ({char_name})")
-                    
-            except Exception as e:
-                print(f"Error deleting inactive channel {channel_id}: {e}")
+        """비활성 채널 확인 기능을 비활성화합니다."""
+        print("[DEBUG] 비활성 채널 확인 기능이 비활성화되었습니다.")
+        return  # 아무것도 하지 않음
 
     async def blacklist_cleanup_task(self):
         """자동 블랙리스트 정리 작업 (매 시간마다 실행)"""
@@ -3023,10 +2971,13 @@ class BotSelector(commands.Bot):
         async def quest_command(interaction: discord.Interaction):
             try:
                 user_id = interaction.user.id
-                self.db.update_login_streak(user_id)
-                # interaction이 이미 응답되었는지 확인
+                
+                # 먼저 defer 호출
                 if not interaction.response.is_done():
                     await interaction.response.defer(ephemeral=True)
+                
+                # 그 다음 데이터베이스 업데이트
+                self.db.update_login_streak(user_id)
 
                 quest_status = await self.get_quest_status(user_id)
                 embed = self.create_quest_embed(user_id, quest_status)
@@ -3983,9 +3934,12 @@ class BotSelector(commands.Bot):
                 import traceback
                 print(traceback.format_exc())
                 try:
-                    await interaction.response.send_message("An error occurred while loading your information.", ephemeral=True)
-                except:
-                    await interaction.followup.send("An error occurred while loading your information.", ephemeral=True)
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("An error occurred while loading your information.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("An error occurred while loading your information.", ephemeral=True)
+                except Exception as send_error:
+                    print(f"Error sending error message: {send_error}")
 
 
 
