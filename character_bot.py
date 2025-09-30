@@ -14,6 +14,9 @@ from config import (
     OPENAI_API_KEY,
     MILESTONE_COLORS,
     SELECTOR_TOKEN as TOKEN,
+    KAGARI_TOKEN,
+    EROS_TOKEN,
+    ELYSIA_TOKEN,
     STORY_CHAPTERS,
     CARD_PROBABILITIES,
     CHARACTER_PROMPTS,
@@ -1658,15 +1661,66 @@ Time-based Response:
             traceback.print_exc()
 
 async def run_all_bots():
-    selector_bot = None
+    # Import here to avoid circular import
+    from bot_selector import BotSelector
+    
+    db = DatabaseManager()
+    character_bots = {}
+
+    # Initialize character bots
+    for char_name in CHARACTER_INFO.keys():
+        character_bots[char_name] = CharacterBot(char_name, db)
+
+    # Initialize selector bot
+    selector_bot = BotSelector()
+    selector_bot.character_bots = character_bots
+
     try:
-        selector_bot = BotSelector()
-        await selector_bot.start(TOKEN)
+        print("Starting bot initialization...")
+        tasks = []
+
+        # Start selector bot
+        tasks.append(run_bot(selector_bot, TOKEN, "Selector"))
+
+        # Start character bots
+        for name, bot in character_bots.items():
+            token = globals()[f"{name.upper()}_TOKEN"]
+            tasks.append(run_bot(bot, token, name))
+
+        # Wait for all bots to start
+        await asyncio.gather(*tasks)
+        print("All bots started successfully!")
+
+        # Keep the program running
+        while True:
+            await asyncio.sleep(1)
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Fatal error in run_all_bots: {e}")
+        raise e
     finally:
-        if selector_bot is not None:
+        # Cleanup in case of error
+        if 'selector_bot' in locals():
             await selector_bot.close()
+        for bot in character_bots.values():
+            await bot.close()
+
+async def run_bot(bot, token, name):
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"Starting {name} bot...")
+            await bot.start(token)
+            print(f"{name} bot started successfully!")
+            return
+        except Exception as e:
+            print(f"Error starting {name} (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print(f"Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+            else:
+                print(f"Max retries reached. {name} failed to start.")
+                raise
 
 print(f"[DEBUG] CharacterBot type:", type(CharacterBot))
 print(f"[DEBUG] dir(CharacterBot):", dir(CharacterBot))
@@ -1934,3 +1988,7 @@ def is_spam(user_id, message, now, user_message_buffers):
     if len(emoji_msgs) >= 5:
         return True, "Spam detected: Emoji or special character repeated 5 or more times."
     return False, ""
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run_all_bots())

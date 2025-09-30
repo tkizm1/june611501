@@ -8136,11 +8136,11 @@ class DMCharacterSelect(discord.ui.Select):
             print(f"Error in DMCharacterSelect callback: {e}")
             await interaction.response.send_message("❌ An error occurred while selecting a character.", ephemeral=True)
 
-async def main():
-    intents = discord.Intents.all()
-    bot = BotSelector()
-    await bot.start(TOKEN)
+# async def main():
+#     intents = discord.Intents.all()
+#     bot = BotSelector()
+#     await bot.start(TOKEN)
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+# if __name__ == "__main__":
+#     import asyncio
+#     asyncio.run(main())
