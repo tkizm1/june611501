@@ -789,22 +789,29 @@ class CharacterSelect(discord.ui.Select):
             # 선택된 캐릭터 봇 찾기
             selected_bot = self.bot_selector.character_bots.get(selected_char)
             if not selected_bot:
-                print(f"[DEBUG] 캐릭터 봇을 찾을 수 없음: {selected_char}")
+                print(f"[DEBUG] 캐릭터 봇을 찾을 수 없음: {selected_char}, 새로 생성합니다.")
+                # 캐릭터 봇이 없으면 즉시 생성
                 try:
-                    if not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "The selected character was not found.",
-                            ephemeral=True
-                        )
-                    else:
-                        await interaction.followup.send(
-                            "The selected character was not found.",
-                            ephemeral=True
-                        )
-                except discord.errors.NotFound:
-                    print("Interaction already expired, sending message to channel instead")
-                    await interaction.channel.send("The selected character was not found.", delete_after=5)
-                return
+                    selected_bot = CharacterBot(selected_char, self.bot_selector)
+                    self.bot_selector.character_bots[selected_char] = selected_bot
+                    print(f"[DEBUG] 캐릭터 봇 생성 완료: {selected_char}")
+                except Exception as e:
+                    print(f"[ERROR] 캐릭터 봇 생성 실패: {e}")
+                    try:
+                        if not interaction.response.is_done():
+                            await interaction.response.send_message(
+                                "Failed to initialize the character bot. Please try again.",
+                                ephemeral=True
+                            )
+                        else:
+                            await interaction.followup.send(
+                                "Failed to initialize the character bot. Please try again.",
+                                ephemeral=True
+                            )
+                    except discord.errors.NotFound:
+                        print("Interaction already expired, sending message to channel instead")
+                        await interaction.channel.send("Failed to initialize the character bot. Please try again.", delete_after=5)
+                    return
 
             # Create user-specific channel
             channel_name = f"chat-{selected_char.lower()}-{interaction.user.name}"
@@ -1216,6 +1223,22 @@ class BotSelector(commands.Bot):
         print(f'{self.user} has connected to Discord!')
         # self.tree.sync()는 setup_hook으로 이동했습니다.
         self.load_active_channels()
+        
+        # CharacterBot 인스턴스들 생성 및 시작
+        await self.initialize_character_bots()
+
+    async def initialize_character_bots(self):
+        """CharacterBot 인스턴스들을 생성합니다."""
+        try:
+            character_names = ['Kagari', 'Eros', 'Elysia']
+            for character_name in character_names:
+                if character_name not in self.character_bots:
+                    print(f"[DEBUG] Creating CharacterBot for {character_name}")
+                    character_bot = CharacterBot(character_name, self)
+                    self.character_bots[character_name] = character_bot
+                    print(f"[DEBUG] CharacterBot for {character_name} created")
+        except Exception as e:
+            print(f"Error initializing character bots: {e}")
 
     def setup_admin_commands(self):
         """관리자 명령어들을 설정합니다."""
@@ -3660,7 +3683,12 @@ class BotSelector(commands.Bot):
                 if not interaction.response.is_done():
                     await interaction.response.defer(ephemeral=True)
                 
-                view = RankingView(self.db)
+                try:
+                    view = RankingView(self.db)
+                except Exception as e:
+                    print(f"Error creating RankingView: {e}")
+                    await interaction.followup.send("An error occurred while loading ranking information.", ephemeral=True)
+                    return
 
                 # 초기 임베드 생성
                 embed = discord.Embed(
@@ -3715,16 +3743,20 @@ class BotSelector(commands.Bot):
                 user_id = interaction.user.id
                 character_name = None
                 
+                # interaction이 이미 응답되었는지 확인
+                if not interaction.response.is_done():
+                    await interaction.response.defer(ephemeral=True)
+                
                 # DM에서 사용하는 경우
                 if isinstance(interaction.channel, discord.DMChannel):
                     if user_id not in self.dm_sessions or 'character_name' not in self.dm_sessions[user_id]:
-                        await interaction.response.send_message("❌ Please select a character first using the `/bot` command.", ephemeral=True)
+                        await interaction.followup.send("❌ Please select a character first using the `/bot` command.", ephemeral=True)
                         return
                     character_name = self.dm_sessions[user_id]['character_name']
                 else:
                     # 서버 채널에서 사용하는 경우
                     if not isinstance(interaction.channel, discord.TextChannel):
-                        await interaction.response.send_message("This command can only be used in server channels or DM.", ephemeral=True)
+                        await interaction.followup.send("This command can only be used in server channels or DM.", ephemeral=True)
                         return
                     
                     # Find the character bot for the current channel
@@ -3735,7 +3767,7 @@ class BotSelector(commands.Bot):
                             break
 
                     if not current_bot:
-                        await interaction.response.send_message("This command can only be used in character chat channels.", ephemeral=True)
+                        await interaction.followup.send("This command can only be used in character chat channels.", ephemeral=True)
                         return
                     
                     character_name = current_bot.character_name
@@ -3743,8 +3775,15 @@ class BotSelector(commands.Bot):
                 print(f"Character name: {character_name}")
 
                 # Get affinity info
-                affinity_info = self.db.get_affinity(interaction.user.id, character_name)
-                print(f"Affinity info: {affinity_info}")
+                try:
+                    print(f"[DEBUG] Getting affinity for user {interaction.user.id}, character {character_name}")
+                    affinity_info = self.db.get_affinity(interaction.user.id, character_name)
+                    print(f"[DEBUG] Affinity info retrieved: {affinity_info}")
+                except Exception as e:
+                    print(f"[ERROR] Error getting affinity info: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    affinity_info = None
 
                 if not affinity_info:
                     current_affinity = 0
@@ -3769,36 +3808,46 @@ class BotSelector(commands.Bot):
                 # Get card collection info
                 print(f"[DEBUG] /info 명령어 - 사용자 카드 조회 시작: {user_id}, 캐릭터: {character_name}")
                 
-                if character_name:
-                    # 특정 캐릭터의 카드만 조회
-                    all_user_cards = self.db.get_user_cards(user_id, character_name)
-                    print(f"[DEBUG] /info 명령어 - {character_name} 카드 수: {len(all_user_cards)}")
-                    
-                    # 카드 데이터 형식 변환 (특정 캐릭터: card_id, acquired_at)
+                try:
+                    if character_name:
+                        # 특정 캐릭터의 카드만 조회
+                        print(f"[DEBUG] Getting cards for specific character: {character_name}")
+                        all_user_cards = self.db.get_user_cards(user_id, character_name)
+                        print(f"[DEBUG] /info 명령어 - {character_name} 카드 수: {len(all_user_cards)}")
+                        print(f"[DEBUG] Raw card data: {all_user_cards}")
+                        
+                        # 카드 데이터 형식 변환 (특정 캐릭터: card_id, acquired_at)
+                        user_cards = []
+                        for card in all_user_cards:
+                            if len(card) >= 2:  # (card_id, acquired_at) 형식
+                                card_data = {
+                                    'character_name': character_name,
+                                    'card_id': card[0],
+                                    'acquired_at': card[1]
+                                }
+                                user_cards.append(card_data)
+                    else:
+                        # 모든 캐릭터의 카드 조회
+                        print(f"[DEBUG] Getting cards for all characters")
+                        all_user_cards = self.db.get_user_cards(user_id)
+                        print(f"[DEBUG] /info 명령어 - 전체 카드 수: {len(all_user_cards)}")
+                        print(f"[DEBUG] Raw card data: {all_user_cards}")
+                        
+                        # 카드 데이터 형식 변환 (모든 캐릭터: character_name, card_id, acquired_at)
+                        user_cards = []
+                        for card in all_user_cards:
+                            if len(card) >= 3:  # (character_name, card_id, acquired_at) 형식
+                                card_data = {
+                                    'character_name': card[0],
+                                    'card_id': card[1],
+                                    'acquired_at': card[2]
+                                }
+                                user_cards.append(card_data)
+                except Exception as e:
+                    print(f"[ERROR] Error getting user cards: {e}")
+                    import traceback
+                    traceback.print_exc()
                     user_cards = []
-                    for card in all_user_cards:
-                        if len(card) >= 2:  # (card_id, acquired_at) 형식
-                            card_data = {
-                                'character_name': character_name,
-                                'card_id': card[0],
-                                'acquired_at': card[1]
-                            }
-                            user_cards.append(card_data)
-                else:
-                    # 모든 캐릭터의 카드 조회
-                    all_user_cards = self.db.get_user_cards(user_id)
-                    print(f"[DEBUG] /info 명령어 - 전체 카드 수: {len(all_user_cards)}")
-                    
-                    # 카드 데이터 형식 변환 (모든 캐릭터: character_name, card_id, acquired_at)
-                    user_cards = []
-                    for card in all_user_cards:
-                        if len(card) >= 3:  # (character_name, card_id, acquired_at) 형식
-                            card_data = {
-                                'character_name': card[0],
-                                'card_id': card[1],
-                                'acquired_at': card[2]
-                            }
-                            user_cards.append(card_data)
                 
                 print(f"[DEBUG] /info 명령어 - 최종 카드 수: {len(user_cards)}")
                 for card in user_cards:
@@ -3896,7 +3945,7 @@ class BotSelector(commands.Bot):
                     embed.set_thumbnail(url=char_image_url)
 
                 # Send the main info embed
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
                 # If user has cards, show card slider
                 if user_cards:
@@ -4274,9 +4323,14 @@ class BotSelector(commands.Bot):
                     return
 
                 # 2. 호감도 체크 (호감도 20 이상만 허용)
-                affinity_info = current_bot.db.get_affinity(interaction.user.id, current_bot.character_name)
-                affinity = affinity_info['emotion_score'] if affinity_info else 0
-                affinity_grade = get_affinity_grade(affinity)
+                try:
+                    affinity_info = current_bot.db.get_affinity(interaction.user.id, current_bot.character_name)
+                    affinity = affinity_info['emotion_score'] if affinity_info else 0
+                    affinity_grade = get_affinity_grade(affinity)
+                except Exception as e:
+                    print(f"Error getting affinity info: {e}")
+                    affinity = 0
+                    affinity_grade = "Rookie"
                 if affinity < 20:
                     embed = discord.Embed(
                         title="⚠️ Roleplay Mode Locked",
@@ -6719,6 +6773,7 @@ class BotSelector(commands.Bot):
             return
         
         character_name = session['character_name']
+        print(f"[DEBUG] DM 메시지 처리 시작 - 사용자: {user_id}, 캐릭터: {character_name}, 메시지: {message.content}")
         
         # 메시지 처리
         try:
@@ -6726,45 +6781,57 @@ class BotSelector(commands.Bot):
             language = self.detect_language(message.content)
             
             # 데이터베이스에 메시지 저장
-            self.db.add_message(
-                channel_id=message.channel.id,
-                user_id=user_id,
-                character_name=character_name,
-                role="user",
-                content=message.content,
-                language=language
-            )
+            try:
+                self.db.add_message(
+                    channel_id=message.channel.id,
+                    user_id=user_id,
+                    character_name=character_name,
+                    role="user",
+                    content=message.content,
+                    language=language
+                )
+            except Exception as e:
+                print(f"Error saving message to database: {e}")
             
             # 감정 분석 및 호감도 업데이트
-            emotion_score = await self.get_ai_response([{"role": "user", "content": message.content}], 0, character_name)
-            self.db.add_emotion_log(user_id, character_name, emotion_score, message.content)
+            try:
+                emotion_score = await self.get_ai_response([{"role": "user", "content": message.content}], 0, character_name)
+                self.db.add_emotion_log(user_id, character_name, emotion_score, message.content)
+            except Exception as e:
+                print(f"Error processing emotion analysis: {e}")
+                emotion_score = 0
             
-            # AI 응답 생성
-            ai_response = await self.get_ai_response([
-                {"role": "user", "content": message.content}
-            ], emotion_score, character_name)
+            # AI 응답 생성 (캐릭터별 성격 적용)
+            try:
+                ai_response = await self.get_ai_response([
+                    {"role": "user", "content": message.content}
+                ], emotion_score, character_name)
+            except Exception as e:
+                print(f"Error generating AI response: {e}")
+                ai_response = "죄송합니다. 현재 응답을 생성할 수 없습니다. 잠시 후 다시 시도해주세요."
             
             # 응답 전송
             await message.channel.send(f"**{character_name}**: {ai_response}")
             
             # 랜덤 카드 획득 체크
-            card_type, card_id = self.get_random_card(character_name, user_id)
-            if card_id:
-                # 카드를 실제로 데이터베이스에 추가
-                success = self.db.add_user_card(user_id, character_name, card_id)
-                if success:
-                    card_info = get_card_info_by_id(character_name, card_id)
-                    if card_info:
-                        embed = discord.Embed(
-                            title="🎉 New Card Acquired!",
-                            description=f"**{card_info['name']}**\n{card_info['description']}",
-                            color=0x00ff00
-                        )
-                        embed.set_thumbnail(url=card_info['image_url'])
-                        await message.channel.send(embed=embed)
-                        print(f"[DEBUG] 카드 획득 성공 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
-                else:
-                    print(f"[ERROR] 카드 획득 실패 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
+            try:
+                card_type, card_id = self.get_random_card(character_name, user_id)
+                if card_id:
+                    # 카드를 실제로 데이터베이스에 추가
+                    success = self.db.add_user_card(user_id, character_name, card_id)
+                    if success:
+                        card_info = get_card_info_by_id(character_name, card_id)
+                        if card_info:
+                            embed = discord.Embed(
+                                title="🎉 New Card Acquired!",
+                                description=f"**{card_info['name']}**\n{card_info['description']}",
+                                color=0x00ff00
+                            )
+                            embed.set_thumbnail(url=card_info['image_url'])
+                            await message.channel.send(embed=embed)
+                            print(f"[DEBUG] 카드 획득 성공 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
+            except Exception as e:
+                print(f"Error checking random card: {e}")
             
         except Exception as e:
             print(f"Error in handle_dm_message: {e}")

@@ -1744,6 +1744,56 @@ async def run_bot(bot, token, name):
                 print(f"Max retries reached. {name} failed to start.")
                 raise
 
+    async def handle_dm_message(self, message: discord.Message):
+        """DM 메시지를 처리합니다."""
+        try:
+            user_id = message.author.id
+            character_name = self.character_name
+            
+            print(f"[DEBUG] CharacterBot.handle_dm_message - 캐릭터: {character_name}, 사용자: {user_id}, 메시지: {message.content}")
+            
+            # 언어 감지
+            language = self.detect_language(message.content)
+            
+            # 데이터베이스에 메시지 저장
+            self.db.add_message(
+                channel_id=message.channel.id,
+                user_id=user_id,
+                character_name=character_name,
+                role="user",
+                content=message.content,
+                language=language
+            )
+            
+            # AI 응답 생성
+            ai_response = await self.get_ai_response([
+                {"role": "user", "content": message.content}
+            ])
+            
+            # 응답 전송
+            await message.channel.send(f"**{character_name}**: {ai_response}")
+            
+            # 랜덤 카드 획득 체크
+            card_type, card_id = self.get_random_card(character_name, user_id)
+            if card_id:
+                # 카드를 실제로 데이터베이스에 추가
+                success = self.db.add_user_card(user_id, character_name, card_id)
+                if success:
+                    card_info = get_card_info_by_id(character_name, card_id)
+                    if card_info:
+                        embed = discord.Embed(
+                            title="🎉 New Card Acquired!",
+                            description=f"**{card_info['name']}**\n{card_info['description']}",
+                            color=0x00ff00
+                        )
+                        embed.set_thumbnail(url=card_info['image_url'])
+                        await message.channel.send(embed=embed)
+                        print(f"[DEBUG] 카드 획득 성공 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
+                        
+        except Exception as e:
+            print(f"[ERROR] CharacterBot.handle_dm_message 오류: {e}")
+            await message.channel.send("❌ 메시지 처리 중 오류가 발생했습니다.")
+
 print(f"[DEBUG] CharacterBot type:", type(CharacterBot))
 print(f"[DEBUG] dir(CharacterBot):", dir(CharacterBot))
 
