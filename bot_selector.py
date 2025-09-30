@@ -7653,8 +7653,17 @@ class QuestView(discord.ui.View):
         
         print(f"[DEBUG] QuestView - Final claimable_quests count: {len(claimable_quests)}")
         
+        # 디버깅을 위해 퀘스트 상태 출력
+        print(f"[DEBUG] QuestView - Quest status: {quest_status}")
+        for quest_type, quests in quest_status.items():
+            print(f"[DEBUG] QuestView - {quest_type} quests: {len(quests)}")
+            for q in quests:
+                print(f"[DEBUG] QuestView - Quest {q.get('id', 'unknown')}: completed={q.get('completed')}, claimed={q.get('claimed')}")
+        
         if claimable_quests:
             self.add_item(QuestClaimSelect(claimable_quests, bot_instance))
+        else:
+            print("[DEBUG] QuestView - No claimable quests found")
 
     class StoryCharacterSelectView(discord.ui.View):
         def __init__(self, bot_instance: "BotSelector"):

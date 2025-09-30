@@ -1053,9 +1053,13 @@ class CharacterBot(commands.Bot):
                 print(f"Channel {channel_id} not found")
                 return
 
-            # 닉네임 확인
-            nickname = self.db.get_user_nickname(user_id, self.character_name)
-            print(f"[DEBUG] get_user_nickname({user_id}, {self.character_name}) -> {nickname}")
+            # 닉네임 확인 (안전하게)
+            try:
+                nickname = self.db.get_user_nickname(user_id, self.character_name)
+                print(f"[DEBUG] get_user_nickname({user_id}, {self.character_name}) -> {nickname}")
+            except Exception as db_error:
+                print(f"[ERROR] Database error getting nickname: {db_error}")
+                nickname = None
 
             if nickname:
                 # 기존 사용자: 환영 메시지 전송

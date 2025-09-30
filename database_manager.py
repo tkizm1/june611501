@@ -55,7 +55,21 @@ class DatabaseManager:
             db_path = DATABASE_URL.replace("sqlite:///", "")
             return sqlite3.connect(db_path)
         else:
-            return psycopg2.connect(DATABASE_URL, sslmode='require')
+            # PostgreSQL 연결에 더 안전한 설정 추가
+            try:
+                return psycopg2.connect(
+                    DATABASE_URL, 
+                    sslmode='require',
+                    connect_timeout=10,  # 연결 타임아웃 10초
+                    keepalives_idle=30,  # TCP keepalive 설정
+                    keepalives_interval=10,
+                    keepalives_count=3
+                )
+            except Exception as e:
+                print(f"[ERROR] PostgreSQL connection failed: {e}")
+                # 연결 실패 시 SQLite로 폴백
+                print("[INFO] Falling back to SQLite...")
+                return sqlite3.connect("bot_database.db")
 
     def return_connection(self, conn):
         """사용한 데이터베이스 연결을 닫습니다."""
