@@ -760,9 +760,6 @@ class BotSelector(commands.Bot):
         # 관리자 명령어 그룹 초기화 (나중에 설정됨)
         self.admin_group = None
         
-        # 명령어 설정 (admin_group 초기화 후)
-        self.setup_commands()
-        
         # 안전장치 초기화
         self.emergency_mode = False
         self.start_time = datetime.now()
@@ -887,6 +884,9 @@ class BotSelector(commands.Bot):
         """ 봇이 시작될 때 필요한 비동기 설정을 수행합니다. """
         # 관리자 명령어 그룹 생성 및 등록
         self.setup_admin_commands()
+        
+        # 일반 명령어들 등록
+        self.setup_commands()
         
         # Cog 로드를 제거하고, 명령어는 setup_commands에서 직접 등록
         await self.tree.sync()
@@ -1807,6 +1807,9 @@ class BotSelector(commands.Bot):
         )
         async def bot_command(interaction: discord.Interaction):
             try:
+                # 먼저 응답을 보내서 타임아웃 방지
+                await interaction.response.defer(ephemeral=True)
+                
                 # DM에서 사용하는 경우
                 if isinstance(interaction.channel, discord.DMChannel):
                     user_id = interaction.user.id
@@ -1852,7 +1855,7 @@ class BotSelector(commands.Bot):
                 
                 # 서버 채널에서 사용하는 경우
                 if not isinstance(interaction.channel, discord.TextChannel):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "This command can only be used in server channels or DM.",
                         ephemeral=True
                     )
@@ -1891,7 +1894,7 @@ class BotSelector(commands.Bot):
                 view = discord.ui.View()
                 view.add_item(CharacterSelect(self))
 
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=embed,
                     view=view,
                     ephemeral=True
@@ -1901,16 +1904,10 @@ class BotSelector(commands.Bot):
                 import traceback
                 print(traceback.format_exc())
                 try:
-                    if not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "An error occurred while loading the character selection menu. Please try again.",
-                            ephemeral=True
-                        )
-                    else:
-                        await interaction.followup.send(
-                            "An error occurred while loading the character selection menu. Please try again.",
-                            ephemeral=True
-                        )
+                    await interaction.followup.send(
+                        "An error occurred while loading the character selection menu. Please try again.",
+                        ephemeral=True
+                    )
                 except Exception as followup_error:
                     print(f"Error sending error message: {followup_error}")
 
@@ -1920,8 +1917,11 @@ class BotSelector(commands.Bot):
         )
         async def close_command(interaction: discord.Interaction):
             try:
+                # 먼저 응답을 보내서 타임아웃 방지
+                await interaction.response.defer(ephemeral=True)
+                
                 if not isinstance(interaction.channel, discord.TextChannel):
-                    await interaction.response.send_message("This command can only be used in server channels.", ephemeral=True)
+                    await interaction.followup.send("This command can only be used in server channels.", ephemeral=True)
                     return
 
                 channel = interaction.channel
@@ -1934,7 +1934,7 @@ class BotSelector(commands.Bot):
                 # ====== 디버깅 로그 추가 끝 ======
 
                 if not channel.category or channel.category.name.lower() != "chatbot":
-                    await interaction.response.send_message("This command can only be used in character chat channels.", ephemeral=True)
+                    await interaction.followup.send("This command can only be used in character chat channels.", ephemeral=True)
                     return
 
                 # 권한 체크
@@ -1951,7 +1951,7 @@ class BotSelector(commands.Bot):
                     can_delete = False
 
                 if not can_delete:
-                    await interaction.response.send_message("You don't have permission to delete this channel.", ephemeral=True)
+                    await interaction.followup.send("You don't have permission to delete this channel.", ephemeral=True)
                     return
 
                 # 캐릭터 봇에서 채널 제거
@@ -1960,18 +1960,17 @@ class BotSelector(commands.Bot):
                 if hasattr(self, 'remove_channel'):
                     self.remove_channel(channel.id)
 
-                # 응답 전송 후 채널 삭제 (중복 응답 방지)
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("Let's talk again next time.", ephemeral=True)
-                else:
-                    await interaction.followup.send("Let's talk again next time.", ephemeral=True)
+                # 응답 전송 후 채널 삭제
+                await interaction.followup.send("Let's talk again next time.", ephemeral=True)
                 # 응답이 전송될 때까지 잠시 대기
                 await asyncio.sleep(1)
                 await channel.delete()
             except Exception as e:
                 print(f"Error in /close command: {e}")
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("Failed to delete the channel. Please try again.", ephemeral=True)
+                try:
+                    await interaction.followup.send("Failed to delete the channel. Please try again.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
 
 
