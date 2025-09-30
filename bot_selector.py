@@ -52,6 +52,61 @@ from character_bot import get_affinity_grade
 from products import product_manager
 from payment_manager import PaymentManager, PaymentWebhookHandler
 
+# 호감도 달성 알림 함수
+async def send_affinity_notification(channel, character_name, affinity_level):
+    """호감도 달성 시 알림 메시지를 보냅니다."""
+    if affinity_level == 20:
+        embed = discord.Embed(
+            title="🎭 Roleplay Mode Unlocked!",
+            description="Congratulations! Roleplay mode is now available! Use /roleplay to enjoy various roleplay modes with your character!",
+            color=discord.Color.purple()
+        )
+        embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
+        embed.add_field(
+            name="What's New",
+            value="• Interactive roleplay scenarios\n• Character-specific personalities\n• Enhanced conversation depth",
+            inline=False
+        )
+        embed.set_footer(text="Keep building your bond to unlock more features!")
+        
+    elif affinity_level == 50:
+        embed = discord.Embed(
+            title="📖 Story Mode Unlocked!",
+            description="Congratulations! Story mode is now available! Use /story to discover various hidden stories of your character!",
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
+        embed.add_field(
+            name="What's New",
+            value="• Character backstory chapters\n• Interactive story choices\n• Exclusive story rewards",
+            inline=False
+        )
+        embed.set_footer(text="Your bond has grown strong enough for deeper stories!")
+    
+    try:
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"Error sending affinity notification: {e}")
+
+# 선물을 통한 호감도 달성 알림 함수
+async def check_and_send_gift_affinity_notifications(bot_selector, interaction, character, user_id, prev_score, new_score):
+    """선물을 통한 호감도 달성 시 알림을 보냅니다."""
+    try:
+        # 20 달성 체크
+        if prev_score < 20 <= new_score:
+            if not bot_selector.db.check_affinity_notification_sent(user_id, character, 20):
+                await send_affinity_notification(interaction.channel, character, 20)
+                bot_selector.db.mark_affinity_notification_sent(user_id, character, 20)
+        
+        # 50 달성 체크
+        if prev_score < 50 <= new_score:
+            if not bot_selector.db.check_affinity_notification_sent(user_id, character, 50):
+                await send_affinity_notification(interaction.channel, character, 50)
+                bot_selector.db.mark_affinity_notification_sent(user_id, character, 50)
+                
+    except Exception as e:
+        print(f"Error sending gift affinity notifications: {e}")
+
 # Force reload gift_manager module to resolve cache issues.
 import gift_manager
 importlib.reload(gift_manager)
@@ -3969,14 +4024,14 @@ class BotSelector(commands.Bot):
                     character_name = 'Elysia'
                 
                 if character_name:
-                    # 현재 캐릭터의 호감도 체크 (100 이상 필요)
+                    # 현재 캐릭터의 호감도 체크 (50 이상 필요)
                     affinity_info = self.db.get_affinity(user_id, character_name)
                     affinity = affinity_info['emotion_score'] if affinity_info else 0
                     
-                    if affinity < 100:
+                    if affinity < 50:
                         embed = discord.Embed(
                             title="⚠️ Story Mode Locked",
-                            description=f"Story mode for {character_name} requires affinity level 100 or higher.",
+                            description=f"Story mode for {character_name} requires affinity level 50 or higher.",
                             color=discord.Color.red()
                         )
                         embed.add_field(
@@ -3986,7 +4041,7 @@ class BotSelector(commands.Bot):
                         )
                         embed.add_field(
                             name="Required Affinity",
-                            value="**100**",
+                            value="**50**",
                             inline=True
                         )
                         embed.add_field(
@@ -4131,7 +4186,7 @@ class BotSelector(commands.Bot):
                         embed.add_field(name="How to Earn & Collect Cards", value="You earn cards through:\n- 🗣️ Emotional chat: score-based triggers (10/20/30)\n- 🎮 Story Mode completions\n- ❤️ Affinity milestone bonuses\nCard Tier Example (Gold user):\n- A (20%) / B (30%) / C (50%)\n- Gold+ user: S (10%) / A (20%) / B (30%) / C (40%)\n📜 Use /mycard to view your collection.", inline=False)
                     elif topic == "story":
                         embed.title = "📖 Story Mode Guide"
-                        embed.add_field(name="How to Play", value="1. Reach Gold level (100+ affinity)\n2. Use /story to start\n3. Choose a chapter\n4. Make choices that affect the story\n\nRewards:\n- Story completion rewards\n- Special card rewards\n- Bonus affinity points", inline=False)
+                        embed.add_field(name="How to Play", value="1. Reach Silver level (50+ affinity)\n2. Use /story to start\n3. Choose a chapter\n4. Make choices that affect the story\n\nRewards:\n- Story completion rewards\n- Special card rewards\n- Bonus affinity points", inline=False)
                     elif topic == "ranking":
                         embed.title = "🏆 Ranking System"
                         embed.add_field(name="How Rankings Work", value="Rankings are based on:\n1. Total affinity across all characters\n2. Daily conversation count\n3. Story mode completion\n\nCheck your rank with /ranking", inline=False)
@@ -4361,6 +4416,7 @@ class BotSelector(commands.Bot):
                 print(f"[DEBUG] is_preferred: {is_preferred}, affinity_change: {affinity_change}")
                 # 호감도 업데이트
                 affinity_info = self.db.get_affinity(user_id, character)
+                prev_score = affinity_info['emotion_score'] if affinity_info else 0
                 highest_milestone = 0
                 if affinity_info and 'highest_milestone_achieved' in affinity_info:
                     highest_milestone = affinity_info['highest_milestone_achieved']
@@ -4372,7 +4428,11 @@ class BotSelector(commands.Bot):
                     score_change=affinity_change,
                     highest_milestone=highest_milestone
                 )
-                print(f"[DEBUG] Affinity updated.")
+                new_score = prev_score + affinity_change
+                print(f"[DEBUG] Affinity updated from {prev_score} to {new_score}.")
+                
+                # 호감도 달성 알림 체크 (20, 50 달성 시)
+                await check_and_send_gift_affinity_notifications(self, interaction, character, user_id, prev_score, new_score)
                 # 임베드 생성 및 전송
                 embed = discord.Embed(
                     title=f"🎁 To {character}",

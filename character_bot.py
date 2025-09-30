@@ -649,6 +649,9 @@ class CharacterBot(commands.Bot):
             if new_milestone > highest_milestone_before:
                 await self.handle_milestone_reward(message, character, user_id, new_milestone)
 
+            # 호감도 달성 알림 체크 (20, 50 달성 시)
+            await self.check_and_send_affinity_notifications(message, character, user_id, prev_score, new_score)
+
             # [추가] 서머리 생성 (10개 메시지마다)
             try:
                 recent_message_count = self.db.get_user_recent_message_count(user_id, character, 10)
@@ -1845,6 +1848,28 @@ class NicknameInputModal(discord.ui.Modal, title="Enter Nickname"):
             print(traceback.format_exc())
             if not interaction.response.is_done():
                 await interaction.response.send_message("A server error occurred.", ephemeral=True)
+
+    async def check_and_send_affinity_notifications(self, message, character, user_id, prev_score, new_score):
+        """호감도 달성 시 알림을 보냅니다."""
+        try:
+            # 20 달성 체크
+            if prev_score < 20 <= new_score:
+                if not self.db.check_affinity_notification_sent(user_id, character, 20):
+                    # bot_selector에서 알림 함수 import
+                    from bot_selector import send_affinity_notification
+                    await send_affinity_notification(message.channel, character, 20)
+                    self.db.mark_affinity_notification_sent(user_id, character, 20)
+            
+            # 50 달성 체크
+            if prev_score < 50 <= new_score:
+                if not self.db.check_affinity_notification_sent(user_id, character, 50):
+                    # bot_selector에서 알림 함수 import
+                    from bot_selector import send_affinity_notification
+                    await send_affinity_notification(message.channel, character, 50)
+                    self.db.mark_affinity_notification_sent(user_id, character, 50)
+                    
+        except Exception as e:
+            print(f"Error sending affinity notifications: {e}")
 
 def is_similar(a, b):
     return SequenceMatcher(None, a, b).ratio() > 0.85

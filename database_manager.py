@@ -82,6 +82,8 @@ class DatabaseManager:
                 self._add_column_if_not_exists(cursor, 'affinity', 'highest_milestone_achieved', 'INTEGER DEFAULT 0')
                 self._add_column_if_not_exists(cursor, 'user_quest_events', 'character_name', 'TEXT')
                 self._add_column_if_not_exists(cursor, 'user_quest_events', 'card_id', 'TEXT')
+                self._add_column_if_not_exists(cursor, 'affinity', 'affinity_20_notified', 'BOOLEAN DEFAULT FALSE')
+                self._add_column_if_not_exists(cursor, 'affinity', 'affinity_50_notified', 'BOOLEAN DEFAULT FALSE')
             conn.commit()
             print("Database setup completed.")
         except Exception as e:
@@ -242,6 +244,58 @@ class DatabaseManager:
             print(f"Error updating affinity: {e}")
             if conn: conn.rollback()
             return None
+        finally:
+            self.return_connection(conn)
+
+    def check_affinity_notification_sent(self, user_id: int, character_name: str, threshold: int) -> bool:
+        """호감도 달성 알림이 이미 전송되었는지 확인합니다."""
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT notification_sent FROM affinity_notifications 
+                    WHERE user_id = %s AND character_name = %s AND threshold = %s
+                """, (user_id, character_name, threshold))
+                result = cursor.fetchone()
+                return result is not None and result[0]
+        except Exception as e:
+            print(f"Error checking affinity notification: {e}")
+            return False
+        finally:
+            self.return_connection(conn)
+
+    def mark_affinity_notification_sent(self, user_id: int, character_name: str, threshold: int):
+        """호감도 달성 알림 전송 기록을 저장합니다."""
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                # 테이블이 존재하지 않으면 생성
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS affinity_notifications (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        character_name VARCHAR(50) NOT NULL,
+                        threshold INTEGER NOT NULL,
+                        notification_sent BOOLEAN DEFAULT TRUE,
+                        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, character_name, threshold)
+                    )
+                """)
+                
+                # 알림 기록 삽입 또는 업데이트
+                cursor.execute("""
+                    INSERT INTO affinity_notifications (user_id, character_name, threshold, notification_sent)
+                    VALUES (%s, %s, %s, TRUE)
+                    ON CONFLICT (user_id, character_name, threshold)
+                    DO UPDATE SET notification_sent = TRUE, sent_at = CURRENT_TIMESTAMP
+                """, (user_id, character_name, threshold))
+                
+                conn.commit()
+        except Exception as e:
+            print(f"Error marking affinity notification: {e}")
+            if conn: conn.rollback()
         finally:
             self.return_connection(conn)
 
