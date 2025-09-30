@@ -1111,6 +1111,20 @@ class BotSelector(commands.Bot):
         # 자동 채널 삭제 작업 시작
         asyncio.create_task(self.auto_channel_deletion_task())
 
+    async def safe_interaction_response(self, interaction, message: str, ephemeral: bool = True):
+        """안전한 interaction 응답을 위한 헬퍼 함수"""
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(message, ephemeral=ephemeral)
+            else:
+                await interaction.followup.send(message, ephemeral=ephemeral)
+        except Exception as e:
+            print(f"Error in safe_interaction_response: {e}")
+            try:
+                await interaction.followup.send(message, ephemeral=ephemeral)
+            except:
+                print(f"Failed to send message: {message}")
+
     async def auto_channel_deletion_task(self):
         """자동 채널 삭제 작업 (1분마다 실행)"""
         print("[DEBUG] 자동 채널 삭제 작업이 시작되었습니다.")
@@ -3523,19 +3537,10 @@ class BotSelector(commands.Bot):
                 print(f"Error in bot_command: {e}")
                 import traceback
                 print(traceback.format_exc())
-                try:
-                    if not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "An error occurred while loading the character selection menu. Please try again.",
-                            ephemeral=True
-                        )
-                    else:
-                        await interaction.followup.send(
-                            "An error occurred while loading the character selection menu. Please try again.",
-                            ephemeral=True
-                        )
-                except Exception as followup_error:
-                    print(f"Error sending error message: {followup_error}")
+                await self.safe_interaction_response(
+                    interaction, 
+                    "An error occurred while loading the character selection menu. Please try again."
+                )
 
         @self.tree.command(
             name="close",
@@ -3616,17 +3621,13 @@ class BotSelector(commands.Bot):
                         self.remove_channel(channel.id)
 
                 # 응답 전송 후 채널 삭제 (중복 응답 방지)
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("Let's talk again next time.", ephemeral=True)
-                else:
-                    await interaction.followup.send("Let's talk again next time.", ephemeral=True)
+                await self.safe_interaction_response(interaction, "Let's talk again next time.")
                 # 응답이 전송될 때까지 잠시 대기
                 await asyncio.sleep(1)
                 await channel.delete()
             except Exception as e:
                 print(f"Error in /close command: {e}")
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("Failed to delete the channel. Please try again.", ephemeral=True)
+                await self.safe_interaction_response(interaction, "Failed to delete the channel. Please try again.")
 
 
 
@@ -3674,10 +3675,7 @@ class BotSelector(commands.Bot):
                 print(f"Error in ranking command: {e}")
                 import traceback
                 print(traceback.format_exc())
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("An error occurred while loading ranking information.", ephemeral=True)
-                else:
-                    await interaction.followup.send("An error occurred while loading ranking information.", ephemeral=True)
+                await self.safe_interaction_response(interaction, "An error occurred while loading ranking information.")
 
         @self.tree.command(
             name="info",
@@ -7784,10 +7782,7 @@ class NewStoryCharacterSelect(discord.ui.Select):
             import traceback
             traceback.print_exc()
             # 오류 발생 시 사용자에게 알림
-            if not interaction.response.is_done():
-                await interaction.response.send_message("An error occurred while loading the character story.", ephemeral=True)
-            else:
-                await interaction.followup.send("An error occurred while loading the character story.", ephemeral=True)
+            await self.safe_interaction_response(interaction, "An error occurred while loading the character story.")
 
 class NewStoryChapterSelect(discord.ui.Select):
     def __init__(self, bot_instance: "BotSelector", character_name: str, progress: list, current_channel=None):
