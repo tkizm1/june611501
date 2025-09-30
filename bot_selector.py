@@ -1078,7 +1078,13 @@ class BotSelector(commands.Bot):
                 
             except Exception as e:
                 print(f"Error in status_command: {e}")
-                await interaction.response.send_message("Error occurred while checking status.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("Error occurred while checking status.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("Error occurred while checking status.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
         # 추가 admin 명령어들
         @self.admin_group.command(
@@ -2392,7 +2398,13 @@ class BotSelector(commands.Bot):
                     await interaction.response.send_message("Failed to update language settings. Please try again.", ephemeral=True)
             except Exception as e:
                 print(f"Error in force_language command: {e}")
-                await interaction.response.send_message("An error occurred while changing language settings.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("An error occurred while changing language settings.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("An error occurred while changing language settings.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
 
         @self.tree.command(
@@ -2444,10 +2456,19 @@ class BotSelector(commands.Bot):
 
             except Exception as e:
                 print(f"Error in check_language command: {e}")
-                await interaction.response.send_message(
-                    "An error occurred while checking language settings.",
-                    ephemeral=True
-                )
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message(
+                            "An error occurred while checking language settings.",
+                            ephemeral=True
+                        )
+                    else:
+                        await interaction.followup.send(
+                            "An error occurred while checking language settings.",
+                            ephemeral=True
+                        )
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
         @self.tree.command(
             name="story",
@@ -2716,7 +2737,13 @@ class BotSelector(commands.Bot):
 
             except Exception as e:
                 print(f"Error in /roleplay: {e}")
-                await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("An error occurred, please contact your administrator.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("An error occurred, please contact your administrator.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
         # --- 인벤토리 및 선물 명령어 통합 ---
 
@@ -3935,7 +3962,13 @@ class BotSelector(commands.Bot):
                 
             except Exception as e:
                 print(f"Error in balance_command: {e}")
-                await interaction.response.send_message("Error occurred while checking balance.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("Error occurred while checking balance.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("Error occurred while checking balance.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
         @self.tree.command(
             name="log",
@@ -4021,7 +4054,13 @@ class BotSelector(commands.Bot):
                 
             except Exception as e:
                 print(f"Error in log_command: {e}")
-                await interaction.response.send_message("Error occurred while checking your log.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("Error occurred while checking your log.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("Error occurred while checking your log.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error sending error message: {followup_error}")
 
 
 
