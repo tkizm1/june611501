@@ -102,10 +102,11 @@ class RankingView(discord.ui.View):
     def __init__(self, db):
         super().__init__()
         self.db = db
-        self.add_item(RankingSelect())
+        self.add_item(RankingSelect(db))
 
 class RankingSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, db):
+        self.db = db
         options = [
             discord.SelectOption(
                 label="Kagari Chat Ranking 🌸",
@@ -147,25 +148,25 @@ class RankingSelect(discord.ui.Select):
             guild = interaction.guild
 
             if ranking_type == "kagari":
-                rankings = self.view.db.get_character_ranking("Kagari")
+                rankings = self.db.get_character_ranking("Kagari")
                 embed.title = "🌸 Kagari Chat Ranking"
-                user_rank = self.view.db.get_user_character_rank(user_id, "Kagari")
-                user_stats = self.view.db.get_user_stats(user_id, "Kagari")
+                user_rank = self.db.get_user_character_rank(user_id, "Kagari")
+                user_stats = self.db.get_user_stats(user_id, "Kagari")
             elif ranking_type == "eros":
-                rankings = self.view.db.get_character_ranking("Eros")
+                rankings = self.db.get_character_ranking("Eros")
                 embed.title = "💝 Eros Chat Ranking"
-                user_rank = self.view.db.get_user_character_rank(user_id, "Eros")
-                user_stats = self.view.db.get_user_stats(user_id, "Eros")
+                user_rank = self.db.get_user_character_rank(user_id, "Eros")
+                user_stats = self.db.get_user_stats(user_id, "Eros")
             elif ranking_type == "elysia":
-                rankings = self.view.db.get_character_ranking("Elysia")
+                rankings = self.db.get_character_ranking("Elysia")
                 embed.title = "🦋 Elysia Chat Ranking"
-                user_rank = self.view.db.get_user_character_rank(user_id, "Elysia")
-                user_stats = self.view.db.get_user_stats(user_id, "Elysia")
+                user_rank = self.db.get_user_character_rank(user_id, "Elysia")
+                user_stats = self.db.get_user_stats(user_id, "Elysia")
             else:  # total
-                rankings = self.view.db.get_total_ranking()
+                rankings = self.db.get_total_ranking()
                 embed.title = "👑 Total Chat Ranking"
-                user_rank = self.view.db.get_user_total_rank(user_id)
-                user_stats = self.view.db.get_user_stats(user_id)
+                user_rank = self.db.get_user_total_rank(user_id)
+                user_stats = self.db.get_user_stats(user_id)
 
             # top20 표시
             if not rankings or len(rankings) == 0:
@@ -197,7 +198,11 @@ class RankingSelect(discord.ui.Select):
                     inline=False
                 )
 
-            await interaction.response.edit_message(embed=embed, view=self.view)
+            # interaction이 이미 응답되었는지 확인
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self.view)
+            else:
+                await interaction.followup.send(embed=embed, view=self.view, ephemeral=True)
 
         except Exception as e:
             print(f"Error in ranking callback: {e}")
@@ -236,9 +241,7 @@ except NameError:
 try:
     RankingView
 except NameError:
-    class RankingView(discord.ui.View):
-        def __init__(self, db):
-            super().__init__()
+    pass
 
 try:
     CardClaimView
@@ -1979,6 +1982,12 @@ class BotSelector(commands.Bot):
         )
         async def ranking_command(interaction: discord.Interaction):
             try:
+                # interaction이 이미 응답되었는지 확인
+                if interaction.response.is_done():
+                    print("[DEBUG] Interaction already responded, using followup")
+                    await interaction.followup.send("Ranking command is being processed...", ephemeral=True)
+                    return
+                
                 view = RankingView(self.db)
 
                 # 초기 임베드 생성
@@ -2009,17 +2018,19 @@ class BotSelector(commands.Bot):
                     inline=False
                 )
 
-                # followup.send 대신 response.send_message 사용
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
             except Exception as e:
                 print(f"Error in ranking command: {e}")
                 import traceback
                 print(traceback.format_exc())
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("An error occurred while loading ranking information.", ephemeral=True)
-                else:
-                    await interaction.followup.send("An error occurred while loading ranking information.", ephemeral=True)
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message("An error occurred while loading ranking information.", ephemeral=True)
+                    else:
+                        await interaction.followup.send("An error occurred while loading ranking information.", ephemeral=True)
+                except Exception as followup_error:
+                    print(f"Error in followup: {followup_error}")
 
         @self.tree.command(
             name="affinity",
@@ -4686,6 +4697,13 @@ class BotSelector(commands.Bot):
                 await self.process_roleplay_message(message, session)
             return
 
+        # CharacterBot 1:1 채팅 채널 처리
+        character_bot, character_name = self.get_character_for_channel(message.channel.id)
+        if character_bot:
+            print(f"[DEBUG] BotSelector delegating message to CharacterBot {character_name}")
+            await character_bot.on_message(message)
+            return
+
         # 일반 채널에서의 기본 채팅 처리
         if message.content.startswith('!'):
             # 명령어는 commands.Bot이 처리
@@ -6651,9 +6669,57 @@ class DMCharacterSelect(discord.ui.Select):
             await interaction.response.send_message("❌ 캐릭터 선택 중 오류가 발생했습니다.", ephemeral=True)
 
 async def main():
-    intents = discord.Intents.all()
+    """모든 봇을 실행합니다."""
+    from character_bot import CharacterBot
+    from config import CHARACTER_INFO, KAGARI_TOKEN, EROS_TOKEN, ELYSIA_TOKEN
+    
+    # CharacterBot 인스턴스들 생성
+    character_bots = {}
+    for char_name in CHARACTER_INFO.keys():
+        character_bots[char_name] = CharacterBot(char_name, None)
+    
+    # BotSelector 인스턴스 생성
     bot = BotSelector()
-    await bot.start(TOKEN)
+    bot.character_bots = character_bots
+    
+    # CharacterBot들에게 BotSelector 참조 설정
+    for bot_instance in character_bots.values():
+        bot_instance.bot_selector = bot
+    
+    try:
+        print("Starting all bots...")
+        tasks = []
+        
+        # BotSelector 시작
+        tasks.append(bot.start(TOKEN))
+        
+        # CharacterBot들 시작
+        tokens = {
+            "Kagari": KAGARI_TOKEN,
+            "Eros": EROS_TOKEN, 
+            "Elysia": ELYSIA_TOKEN
+        }
+        
+        for char_name, bot_instance in character_bots.items():
+            token = tokens.get(char_name)
+            if token:
+                tasks.append(bot_instance.start(token))
+        
+        # 모든 봇을 동시에 실행
+        await asyncio.gather(*tasks)
+        
+    except Exception as e:
+        print(f"Error running bots: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        # 정리
+        try:
+            await bot.close()
+            for bot_instance in character_bots.values():
+                await bot_instance.close()
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
 
 if __name__ == "__main__":
     import asyncio

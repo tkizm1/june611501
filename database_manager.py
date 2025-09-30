@@ -28,8 +28,11 @@ def get_db_manager():
 # 데이터베이스 생성 함수 호출
 create_all_tables()
 
-# 환경변수에서 DATABASE_URL 읽기
+# 환경변수에서 DATABASE_URL 읽기, 없으면 SQLite 사용
 DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    # SQLite 사용 (로컬 개발용)
+    DATABASE_URL = "sqlite:///bot_database.db"
 
 class DatabaseManager:
     def __init__(self):
@@ -47,7 +50,12 @@ class DatabaseManager:
 
     def get_connection(self):
         """데이터베이스 연결을 가져옵니다."""
-        return psycopg2.connect(DATABASE_URL, sslmode='require')
+        if DATABASE_URL.startswith("sqlite"):
+            import sqlite3
+            db_path = DATABASE_URL.replace("sqlite:///", "")
+            return sqlite3.connect(db_path)
+        else:
+            return psycopg2.connect(DATABASE_URL, sslmode='require')
 
     def return_connection(self, conn):
         """사용한 데이터베이스 연결을 닫습니다."""
