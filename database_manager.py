@@ -1129,7 +1129,7 @@ class DatabaseManager:
                 # CST 시간대 변환을 사용한 정확한 계산
                 try:
                     cursor.execute(
-                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND DATE(timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s AND message_role = 'user'",
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND DATE(timestamp AT TIME ZONE 'Asia/Shanghai') = %s AND message_role = 'user'",
                         (user_id, today_cst)
                     )
                     count = cursor.fetchone()[0]
@@ -2173,7 +2173,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT COUNT(*) FROM conversations 
                     WHERE message_role = 'user' 
-                    AND DATE(timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
+                    AND DATE(timestamp AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
                 """)
                 return cursor.fetchone()[0]
     
@@ -2191,7 +2191,7 @@ class DatabaseManager:
                 # UTC+8 시간대 (CST) 기준으로 오늘 카드 지급 수 계산
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
-                    WHERE DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
+                    WHERE DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
                 """)
                 return cursor.fetchone()[0]
     
@@ -2199,16 +2199,17 @@ class DatabaseManager:
         """특정 사용자의 오늘(CST 기준) 카드 획득 수를 반환합니다."""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                # CST 시간대 기준으로 오늘 카드 획득 수 계산 (다른 데일리 퀘스트와 동일한 방식)
+                # CST 시간대 기준으로 오늘 카드 획득 수 계산
                 today_cst = get_today_cst()
                 print(f"[DEBUG] get_user_daily_card_count - user_id={user_id}, today_cst={today_cst}")
                 
                 # acquired_at이 NULL이 아닌 카드들만 조회 (NULL인 카드는 제외)
+                # 시간대 변환을 올바르게 수행
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
                     WHERE user_id = %s 
                     AND acquired_at IS NOT NULL
-                    AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
+                    AND DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
                 count = cursor.fetchone()[0]
@@ -2219,7 +2220,7 @@ class DatabaseManager:
                     SELECT card_id, character_name, acquired_at FROM user_cards 
                     WHERE user_id = %s 
                     AND acquired_at IS NOT NULL
-                    AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
+                    AND DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
                 today_cards = cursor.fetchall()

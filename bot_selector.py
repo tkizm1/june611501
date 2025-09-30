@@ -1113,9 +1113,11 @@ class BotSelector(commands.Bot):
 
     async def auto_channel_deletion_task(self):
         """자동 채널 삭제 작업 (1분마다 실행)"""
+        print("[DEBUG] 자동 채널 삭제 작업이 시작되었습니다.")
         while True:
             try:
                 await asyncio.sleep(60)  # 1분마다 체크
+                print("[DEBUG] 자동 채널 삭제 체크 실행 중...")
                 await self.check_inactive_channels()
             except Exception as e:
                 print(f"Error in auto channel deletion task: {e}")
@@ -1129,14 +1131,21 @@ class BotSelector(commands.Bot):
         
         channels_to_delete = []
         
+        print(f"[DEBUG] 채널 활동 시간 기록: {self.channel_last_activity}")
+        
         # 모든 캐릭터 봇의 active_channels 확인
         for char_name, bot in self.character_bots.items():
+            print(f"[DEBUG] {char_name} 봇의 활성 채널: {bot.active_channels}")
             for channel_id, channel_data in bot.active_channels.items():
                 last_activity = self.channel_last_activity.get(channel_id, current_time)
+                inactive_time = current_time - last_activity
+                
+                print(f"[DEBUG] 채널 {channel_id} 마지막 활동: {inactive_time:.1f}초 전")
                 
                 # 3분 이상 비활성 상태인 채널 찾기
-                if current_time - last_activity > inactive_threshold:
+                if inactive_time > inactive_threshold:
                     channels_to_delete.append((channel_id, char_name))
+                    print(f"[DEBUG] 삭제 대상 채널 발견: {channel_id} ({char_name})")
         
         # 비활성 채널 삭제
         for channel_id, char_name in channels_to_delete:
@@ -4183,7 +4192,7 @@ class BotSelector(commands.Bot):
                         embed.add_field(name="Level Up with Conversations", value="- Rookie (0-9): Basic chat only.\n- ⚔️ Iron (10-29): Unlock basic emotions & C-rank cards.\n- 🥉 Bronze (30-49): B/C cards & more emotions.\n- Silver (50-99): A/B/C cards & story mood options.\n- Gold (100+): S-tier chance & story unlock.\nCommand: /info to check your current level, progress, and daily message stats.", inline=False)
                     elif topic == "card":
                         embed.title = "🎴 Card & Reward System"
-                        embed.add_field(name="How to Earn & Collect Cards", value="You earn cards through:\n- 🗣️ Emotional chat: score-based triggers (10/20/30)\n- 🎮 Story Mode completions\n- ❤️ Affinity milestone bonuses\nCard Tier Example (Gold user):\n- A (20%) / B (30%) / C (50%)\n- Gold+ user: S (10%) / A (20%) / B (30%) / C (40%)\n📜 Use /mycard to view your collection.", inline=False)
+                        embed.add_field(name="How to Earn & Collect Cards", value="You earn cards through:\n- 🗣️ Emotional chat: score-based triggers (10/20/30)\n- 🎮 Story Mode completions\n- ❤️ Affinity milestone bonuses\nCard Tier Example (Gold user):\n- A (20%) / B (30%) / C (50%)\n- Gold+ user: S (10%) / A (20%) / B (30%) / C (40%)\n📜 Use /info to view your collection.", inline=False)
                     elif topic == "story":
                         embed.title = "📖 Story Mode Guide"
                         embed.add_field(name="How to Play", value="1. Reach Silver level (50+ affinity)\n2. Use /story to start\n3. Choose a chapter\n4. Make choices that affect the story\n\nRewards:\n- Story completion rewards\n- Special card rewards\n- Bonus affinity points", inline=False)
@@ -4192,7 +4201,7 @@ class BotSelector(commands.Bot):
                         embed.add_field(name="How Rankings Work", value="Rankings are based on:\n1. Total affinity across all characters\n2. Daily conversation count\n3. Story mode completion\n\nCheck your rank with /ranking", inline=False)
                     elif topic == "dm":
                         embed.title = "💬 DM Usage Guide"
-                        embed.add_field(name="How to Use in DMs", value="1. **Start a DM**: Send any message to the bot in DMs\n2. **Select Character**: Use `/bot` command to choose a character\n3. **Start Chatting**: Talk freely with your chosen character\n4. **Session Timeout**: 30 minutes of inactivity will end the session\n\n**Available Commands in DM:**\n• `/bot` - Select character\n• `/info` - Check affinity and cards\n• `/mycard` - View cards\n• `/quest` - Check quests\n• `/help` - Show this help", inline=False)
+                        embed.add_field(name="How to Use in DMs", value="1. **Start a DM**: Send any message to the bot in DMs\n2. **Select Character**: Use `/bot` command to choose a character\n3. **Start Chatting**: Talk freely with your chosen character\n4. **Session Timeout**: 30 minutes of inactivity will end the session\n\n**Available Commands in DM:**\n• `/bot` - Select character\n• `/info` - Check affinity and cards\n• `/info` - View cards\n• `/quest` - Check quests\n• `/help` - Show this help", inline=False)
                         embed.add_field(name="💡 Tips", value="• DM allows more private conversations\n• All features work the same as in servers\n• Characters remember your conversation context\n• You can switch characters anytime with `/bot`", inline=False)
                     elif topic == "faq":
                         embed.title = "❓ FAQ"
@@ -6762,7 +6771,7 @@ class BotSelector(commands.Bot):
         # 환영 메시지 전송
         embed = discord.Embed(
             title="🌸 Welcome to ZeroLink Chatbot!",
-            description="You can chat with the chatbot in DM as well.\n\n**How to use:**\n1. Select a character using the `/bot` command\n2. Chat freely with your selected character\n3. Sessions will automatically end after 30 minutes of inactivity\n\n**Available commands:**\n• `/bot` - Select character\n• `/info` - Check affinity and cards\n• `/mycard` - Check owned cards\n• `/quest` - Check quests\n• `/help` - Help\n\n**💡 Tip:** You can use the same commands on the server!",
+            description="You can chat with the chatbot in DM as well.\n\n**How to use:**\n1. Select a character using the `/bot` command\n2. Chat freely with your selected character\n3. Sessions will automatically end after 30 minutes of inactivity\n\n**Available commands:**\n• `/bot` - Select character\n• `/info` - Check affinity and cards\n• `/info` - Check owned cards\n• `/quest` - Check quests\n• `/help` - Help\n\n**💡 Tip:** You can use the same commands on the server!",
             color=0xff69b4
         )
         embed.set_footer(text="ZeroLink 챗봇 DM 모드 • 서버와 DM 모두 지원")
@@ -8080,7 +8089,7 @@ class DMCharacterSelect(discord.ui.Select):
             
             embed = discord.Embed(
                 title=f"✅ {selected_character} Selection Complete!",
-                description=f"You can now chat freely with {selected_character} in DM.\n\n**Available commands:**\n• `/info` - Check affinity and cards\n• `/mycard` - Check owned cards\n• `/quest` - Check quests\n• `/help` - Help",
+                description=f"You can now chat freely with {selected_character} in DM.\n\n**Available commands:**\n• `/info` - Check affinity and cards\n• `/info` - Check owned cards\n• `/quest` - Check quests\n• `/help` - Help",
                 color=0x00ff00
             )
             

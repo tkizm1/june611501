@@ -391,6 +391,11 @@ class CharacterBot(commands.Bot):
         if message.channel.id not in self.active_channels:
             return
 
+        # 채널 활동 시간 업데이트 (자동 삭제 기능용)
+        if hasattr(self, 'bot_selector') and self.bot_selector:
+            import time
+            self.bot_selector.channel_last_activity[message.channel.id] = time.time()
+
         # 1. 빈 메시지/시스템 메시지/히스토리 임베드 무시
         if not message.content or message.content.strip() == "":
             return
@@ -1653,7 +1658,7 @@ class CardClaimButton(discord.ui.Button):
             if success:
                 embed = discord.Embed(
                     title="🎉 Card Claimed!",
-                    description=f"You have claimed the {self.character_name} {self.milestone} conversation milestone card.\nUse `/mycard` to check your cards!",
+                    description=f"You have claimed the {self.character_name} {self.milestone} conversation milestone card.\nUse `/info` to check your cards!",
                     color=discord.Color.green()
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -1714,7 +1719,7 @@ class CardClaimView(discord.ui.View):
                 button.disabled = True
                 button.label = "✅ Claimed"
                 await interaction.message.edit(embed=embed, view=self)
-                await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
+                await interaction.followup.send("Card successfully claimed! Check your /info.", ephemeral=True)
             else:
                 # 이미 카드를 가지고 있는 경우
                 await interaction.followup.send("You have already claimed this card.", ephemeral=True)
@@ -1726,7 +1731,7 @@ class CardClaimView(discord.ui.View):
                 button.disabled = True
                 button.label = "✅ Claimed"
                 await interaction.message.edit(view=self)
-                await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
+                await interaction.followup.send("Card successfully claimed! Check your /info.", ephemeral=True)
             else:
                 await interaction.followup.send("An error occurred while claiming the card. Please try again.", ephemeral=True)
 
