@@ -2976,10 +2976,26 @@ class BotSelector(commands.Bot):
                 if not interaction.response.is_done():
                     await interaction.response.defer(ephemeral=True)
                 
-                # 그 다음 데이터베이스 업데이트
-                self.db.update_login_streak(user_id)
+                # 그 다음 데이터베이스 업데이트 (안전하게)
+                try:
+                    self.db.update_login_streak(user_id)
+                except Exception as db_error:
+                    print(f"[WARNING] Database update failed: {db_error}")
+                    # 데이터베이스 오류가 있어도 퀘스트는 표시할 수 있음
 
-                quest_status = await self.get_quest_status(user_id)
+                # 퀘스트 상태 조회 (안전하게)
+                try:
+                    quest_status = await self.get_quest_status(user_id)
+                except Exception as quest_error:
+                    print(f"[ERROR] Failed to get quest status: {quest_error}")
+                    # 기본 퀘스트 상태 생성
+                    quest_status = {
+                        'daily': [],
+                        'weekly': [],
+                        'levelup': [],
+                        'story': []
+                    }
+
                 embed = self.create_quest_embed(user_id, quest_status)
                 view = QuestView(user_id, quest_status, self)
 
@@ -5559,66 +5575,71 @@ class BotSelector(commands.Bot):
     async def check_daily_quests(self, user_id: int) -> list:
         """일일 퀘스트 상태를 affinity DB의 실시간 값으로 정확히 반영합니다."""
         quests = []
+        
+        try:
+            # 1. 대화 20회 퀘스트
+            # --- 오늘의 실제 대화 수를 get_total_daily_messages로 계산 (모든 언어 포함) ---
+            total_daily_messages = self.db.get_total_daily_messages(user_id)
+            quest_id = 'daily_conversation'
+            claimed = self.db.is_quest_claimed(user_id, quest_id)
+            reward_name = None
+            if claimed:
+                user_gifts = self.db.get_user_gifts(user_id)
+                reward_name = user_gifts[0][0] if user_gifts else None
+            quests.append({
+                'id': quest_id,
+                'name': '💬 Daily Conversation',
+                'description': f'({total_daily_messages}/20)',
+                'progress': min(total_daily_messages, 20),
+                'max_progress': 20,
+                'completed': total_daily_messages >= 20,
+                'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
+                'claimed': claimed
+            })
 
-        # 1. 대화 20회 퀘스트
-        # --- 오늘의 실제 대화 수를 get_total_daily_messages로 계산 (모든 언어 포함) ---
-        total_daily_messages = self.db.get_total_daily_messages(user_id)
-        quest_id = 'daily_conversation'
-        claimed = self.db.is_quest_claimed(user_id, quest_id)
-        reward_name = None
-        if claimed:
-            user_gifts = self.db.get_user_gifts(user_id)
-            reward_name = user_gifts[0][0] if user_gifts else None
-        quests.append({
-            'id': quest_id,
-            'name': '💬 Daily Conversation',
-            'description': f'({total_daily_messages}/20)',
-            'progress': min(total_daily_messages, 20),
-            'max_progress': 20,
-            'completed': total_daily_messages >= 20,
-            'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
-            'claimed': claimed
-        })
+            # 2. 호감도 +5 퀘스트
+            affinity_gain = self.db.get_today_affinity_gain(user_id)
+            quest_id = 'daily_affinity_gain'
+            claimed = self.db.is_quest_claimed(user_id, quest_id)
+            reward_name = None
+            if claimed:
+                user_gifts = self.db.get_user_gifts(user_id)
+                reward_name = user_gifts[0][0] if user_gifts else None
+            quests.append({
+                'id': quest_id,
+                'name': '💖 Affinity +5',
+                'description': f'({affinity_gain}/5)',
+                'progress': min(affinity_gain, 5),
+                'max_progress': 5,
+                'completed': affinity_gain >= 5,
+                'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
+                'claimed': claimed
+            })
 
-        # 2. 호감도 +5 퀘스트
-        affinity_gain = self.db.get_today_affinity_gain(user_id)
-        quest_id = 'daily_affinity_gain'
-        claimed = self.db.is_quest_claimed(user_id, quest_id)
-        reward_name = None
-        if claimed:
-            user_gifts = self.db.get_user_gifts(user_id)
-            reward_name = user_gifts[0][0] if user_gifts else None
-        quests.append({
-            'id': quest_id,
-            'name': '💖 Affinity +5',
-            'description': f'({affinity_gain}/5)',
-            'progress': min(affinity_gain, 5),
-            'max_progress': 5,
-            'completed': affinity_gain >= 5,
-            'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
-            'claimed': claimed
-        })
+            # 3. 신규 카드 1장 획득 퀘스트
+            daily_cards = self.db.get_user_daily_card_count(user_id)
+            quest_id = 'daily_card_obtain'
+            claimed = self.db.is_quest_claimed(user_id, quest_id)
+            reward_name = None
+            if claimed:
+                user_gifts = self.db.get_user_gifts(user_id)
+                reward_name = user_gifts[0][0] if user_gifts else None
+            quests.append({
+                'id': quest_id,
+                'name': '🃏 Get New Card',
+                'description': f'Obtain 1 new card today ({daily_cards}/1)',
+                'progress': min(daily_cards, 1),
+                'max_progress': 1,
+                'completed': daily_cards >= 1,
+                'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
+                'claimed': claimed
+            })
 
-        # 3. 신규 카드 1장 획득 퀘스트
-        daily_cards = self.db.get_user_daily_card_count(user_id)
-        quest_id = 'daily_card_obtain'
-        claimed = self.db.is_quest_claimed(user_id, quest_id)
-        reward_name = None
-        if claimed:
-            user_gifts = self.db.get_user_gifts(user_id)
-            reward_name = user_gifts[0][0] if user_gifts else None
-        quests.append({
-            'id': quest_id,
-            'name': '🃏 Get New Card',
-            'description': f'Obtain 1 new card today ({daily_cards}/1)',
-            'progress': min(daily_cards, 1),
-            'max_progress': 1,
-            'completed': daily_cards >= 1,
-            'reward': f'Random Common Item x1' + (f'\nGifts received: {reward_name}' if reward_name else ''),
-            'claimed': claimed
-        })
-
-        return quests
+            return quests
+            
+        except Exception as e:
+            print(f"Error in check_daily_quests: {e}")
+            return []  # 오류 발생 시 빈 리스트 반환
 
     async def check_weekly_quests(self, user_id: int) -> list:
         """주간 퀘스트 상태를 확인합니다."""
