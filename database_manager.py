@@ -1281,9 +1281,12 @@ class DatabaseManager:
             # 추가 디버깅: 실제 DB에서 확인
             self.debug_card_share_events(user_id)
             
+            return True  # 성공적으로 기록됨
+            
         except Exception as e:
             print(f"[ERROR] record_card_share 실패: {e}")
             if conn: conn.rollback()
+            return False
         finally:
             self.return_connection(conn)
 
