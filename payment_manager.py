@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Payment Manager for Discord Bot
-Discord DM으로 결제 성공 메시지를 보내는 기능을 제공합니다.
+Provides functionality to send payment success messages via Discord DM.
 """
 
 import discord
@@ -12,65 +12,65 @@ import asyncio
 class PaymentManager:
     def __init__(self, bot):
         self.bot = bot
-        self.db = None  # 데이터베이스 매니저 참조
+        self.db = None  # Database manager reference
         
     def set_database(self, db_manager):
-        """데이터베이스 매니저를 설정합니다."""
+        """Sets the database manager."""
         self.db = db_manager
     
     async def send_payment_success_dm(self, user_id: int, payment_data: Dict[str, Any]) -> bool:
         """
-        결제 성공 시 사용자에게 DM을 보냅니다.
+        Sends a DM to the user when payment is successful.
         
         Args:
-            user_id (int): 사용자 Discord ID
-            payment_data (dict): 결제 정보
-                - product_name: 상품명
-                - amount: 결제 금액
-                - currency: 통화
-                - transaction_id: 거래 ID
-                - subscription_type: 구독 타입 (예: "Premium", "Starter")
-                - duration: 구독 기간
-                - features: 제공되는 기능들
+            user_id (int): User Discord ID
+            payment_data (dict): Payment information
+                - product_name: Product name
+                - amount: Payment amount
+                - currency: Currency
+                - transaction_id: Transaction ID
+                - subscription_type: Subscription type (e.g., "Premium", "Starter")
+                - duration: Subscription duration
+                - features: Provided features
         
         Returns:
-            bool: DM 전송 성공 여부
+            bool: DM sending success status
         """
         try:
-            # 사용자 객체 가져오기
+            # Get user object
             user = self.bot.get_user(user_id)
             if not user:
-                print(f"❌ 사용자를 찾을 수 없습니다: {user_id}")
+                print(f"❌ User not found: {user_id}")
                 return False
             
-            # DM 채널 생성 또는 가져오기
+            # Create or get DM channel
             try:
                 dm_channel = await user.create_dm()
             except discord.Forbidden:
-                print(f"❌ 사용자 {user_id}의 DM을 생성할 수 없습니다 (DM 비활성화)")
+                print(f"❌ Cannot create DM for user {user_id} (DM disabled)")
                 return False
             
-            # 결제 성공 임베드 생성
+            # Create payment success embed
             embed = self._create_payment_success_embed(payment_data)
             
-            # DM 전송
+            # Send DM
             await dm_channel.send(embed=embed)
             
-            # 데이터베이스에 결제 기록 저장
+            # Save payment record to database
             if self.db:
                 await self._save_payment_record(user_id, payment_data)
             
-            print(f"✅ 결제 성공 DM 전송 완료: {user_id}")
+            print(f"✅ Payment success DM sent: {user_id}")
             return True
             
         except Exception as e:
-            print(f"❌ 결제 성공 DM 전송 실패: {e}")
+            print(f"❌ Payment success DM sending failed: {e}")
             return False
     
     def _create_payment_success_embed(self, payment_data: Dict[str, Any]) -> discord.Embed:
-        """결제 성공 임베드를 생성합니다."""
+        """Creates a payment success embed."""
         
-        # 기본 정보
+        # Basic information
         product_name = payment_data.get('product_name', 'Premium Subscription')
         amount = payment_data.get('amount', 0)
         currency = payment_data.get('currency', 'USD')
@@ -78,7 +78,7 @@ class PaymentManager:
         duration = payment_data.get('duration', '1 month')
         features = payment_data.get('features', [])
         
-        # 임베드 생성
+        # Create embed
         embed = discord.Embed(
             title="🎉 Welcome to Engage Premium!",
             description=f"**{subscription_type} Access Purchased**",
@@ -86,7 +86,7 @@ class PaymentManager:
             timestamp=datetime.now()
         )
         
-        # 상품 정보 추가
+        # Add product information
         embed.add_field(
             name="📦 Product Details",
             value=f"**{product_name}**\n"
@@ -95,7 +95,7 @@ class PaymentManager:
             inline=False
         )
         
-        # 제공되는 기능들
+        # Provided features
         if features:
             features_text = "\n".join([f"• {feature}" for feature in features])
             embed.add_field(
@@ -104,7 +104,7 @@ class PaymentManager:
                 inline=False
             )
         
-        # 추가 안내사항
+        # Additional information
         embed.add_field(
             name="📋 Next Steps",
             value="• Your premium access has been activated\n"
@@ -113,36 +113,36 @@ class PaymentManager:
             inline=False
         )
         
-        # 푸터
+        # Footer
         embed.set_footer(
             text="Thank you for choosing Engage Premium!",
             icon_url=self.bot.user.avatar.url if self.bot.user and self.bot.user.avatar else None
         )
         
-        # 썸네일 (선택사항)
+        # Thumbnail (optional)
         embed.set_thumbnail(url="https://imagedelivery.net/ZQ-g2Ke3i84UnMdCSDAkmw/premium-icon/public")
         
         return embed
     
     async def _save_payment_record(self, user_id: int, payment_data: Dict[str, Any]):
-        """결제 기록을 데이터베이스에 저장합니다."""
+        """Saves payment record to database."""
         try:
             if not self.db:
                 return
             
-            # 결제 기록 저장
+            # Save payment record
             transaction_id = payment_data.get('transaction_id', f"txn_{user_id}_{int(datetime.now().timestamp())}")
             
-            # 데이터베이스에 결제 기록 저장 (실제 구현은 데이터베이스 구조에 따라 달라질 수 있음)
-            # 예시: self.db.add_payment_transaction(user_id, transaction_id, payment_data)
+            # Save payment record to database (actual implementation may vary based on database structure)
+            # Example: self.db.add_payment_transaction(user_id, transaction_id, payment_data)
             
-            print(f"✅ 결제 기록 저장 완료: {user_id} - {transaction_id}")
+            print(f"✅ Payment record saved: {user_id} - {transaction_id}")
             
         except Exception as e:
-            print(f"❌ 결제 기록 저장 실패: {e}")
+            print(f"❌ Payment record saving failed: {e}")
     
     async def send_payment_failure_dm(self, user_id: int, error_message: str) -> bool:
-        """결제 실패 시 사용자에게 DM을 보냅니다."""
+        """Sends a DM to the user when payment fails."""
         try:
             user = self.bot.get_user(user_id)
             if not user:
@@ -173,11 +173,11 @@ class PaymentManager:
             return True
             
         except Exception as e:
-            print(f"❌ 결제 실패 DM 전송 실패: {e}")
+            print(f"❌ Payment failure DM sending failed: {e}")
             return False
     
     async def send_subscription_expiry_warning(self, user_id: int, days_remaining: int) -> bool:
-        """구독 만료 경고 DM을 보냅니다."""
+        """Sends a subscription expiry warning DM."""
         try:
             user = self.bot.get_user(user_id)
             if not user:
@@ -202,23 +202,23 @@ class PaymentManager:
             return True
             
         except Exception as e:
-            print(f"❌ 구독 만료 경고 DM 전송 실패: {e}")
+            print(f"❌ Subscription expiry warning DM sending failed: {e}")
             return False
 
-# 결제 웹훅 처리 클래스
+# Payment webhook handler class
 class PaymentWebhookHandler:
     def __init__(self, payment_manager: PaymentManager):
         self.payment_manager = payment_manager
     
     async def handle_payment_webhook(self, webhook_data: Dict[str, Any]) -> bool:
         """
-        결제 웹훅을 처리합니다.
+        Handles payment webhooks.
         
         Args:
-            webhook_data: 웹훅 데이터
-                - user_id: 사용자 Discord ID
-                - status: 결제 상태 (success, failed, cancelled)
-                - payment_data: 결제 정보
+            webhook_data: Webhook data
+                - user_id: User Discord ID
+                - status: Payment status (success, failed, cancelled)
+                - payment_data: Payment information
         """
         try:
             user_id = webhook_data.get('user_id')
@@ -226,7 +226,7 @@ class PaymentWebhookHandler:
             payment_data = webhook_data.get('payment_data', {})
             
             if not user_id:
-                print("❌ 웹훅에 user_id가 없습니다.")
+                print("❌ No user_id in webhook.")
                 return False
             
             if status == 'success':
@@ -235,16 +235,16 @@ class PaymentWebhookHandler:
                 error_message = webhook_data.get('error_message', 'Unknown error')
                 return await self.payment_manager.send_payment_failure_dm(user_id, error_message)
             else:
-                print(f"❌ 알 수 없는 결제 상태: {status}")
+                print(f"❌ Unknown payment status: {status}")
                 return False
                 
         except Exception as e:
-            print(f"❌ 웹훅 처리 실패: {e}")
+            print(f"❌ Webhook processing failed: {e}")
             return False
 
-# 사용 예시 함수들
+# Example usage functions
 async def example_payment_success(bot, user_id: int):
-    """결제 성공 예시"""
+    """Payment success example"""
     payment_manager = PaymentManager(bot)
     
     payment_data = {
@@ -266,7 +266,7 @@ async def example_payment_success(bot, user_id: int):
     return success
 
 async def example_payment_failure(bot, user_id: int):
-    """결제 실패 예시"""
+    """Payment failure example"""
     payment_manager = PaymentManager(bot)
     
     error_message = "Insufficient funds. Please check your payment method."
