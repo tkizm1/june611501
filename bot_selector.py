@@ -583,22 +583,29 @@ class CharacterSelect(discord.ui.Select):
             # 선택된 캐릭터 봇 찾기
             selected_bot = self.bot_selector.character_bots.get(selected_char)
             if not selected_bot:
-                print(f"[DEBUG] 캐릭터 봇을 찾을 수 없음: {selected_char}")
+                print(f"[DEBUG] 캐릭터 봇을 찾을 수 없음: {selected_char}, 새로 생성합니다.")
+                # 캐릭터 봇이 없으면 즉시 생성
                 try:
-                    if not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "The selected character was not found.",
-                            ephemeral=True
-                        )
-                    else:
-                        await interaction.followup.send(
-                            "The selected character was not found.",
-                            ephemeral=True
-                        )
-                except discord.errors.NotFound:
-                    print("Interaction already expired, sending message to channel instead")
-                    await interaction.channel.send("The selected character was not found.", delete_after=5)
-                return
+                    selected_bot = CharacterBot(selected_char, self.bot_selector)
+                    self.bot_selector.character_bots[selected_char] = selected_bot
+                    print(f"[DEBUG] 캐릭터 봇 생성 완료: {selected_char}")
+                except Exception as e:
+                    print(f"[ERROR] 캐릭터 봇 생성 실패: {e}")
+                    try:
+                        if not interaction.response.is_done():
+                            await interaction.response.send_message(
+                                "Failed to initialize the character bot. Please try again.",
+                                ephemeral=True
+                            )
+                        else:
+                            await interaction.followup.send(
+                                "Failed to initialize the character bot. Please try again.",
+                                ephemeral=True
+                            )
+                    except discord.errors.NotFound:
+                        print("Interaction already expired, sending message to channel instead")
+                        await interaction.channel.send("Failed to initialize the character bot. Please try again.", delete_after=5)
+                    return
 
             # 사용자별 채널 생성
             channel_name = f"chat-{selected_char.lower()}-{interaction.user.name}"
@@ -1846,7 +1853,7 @@ class BotSelector(commands.Bot):
                     view = discord.ui.View()
                     view.add_item(DMCharacterSelect(self))
                     
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         embed=embed,
                         view=view,
                         ephemeral=True
@@ -2589,6 +2596,61 @@ class BotSelector(commands.Bot):
             
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+
+        async def character_select_callback(self, interaction: discord.Interaction, selected_char: str):
+            """일반 채팅용 캐릭터 선택 콜백"""
+            try:
+                await interaction.response.defer(ephemeral=True)
+                
+                # 캐릭터 정보 가져오기
+                character_info = CHARACTER_INFO.get(selected_char)
+                if not character_info:
+                    await interaction.followup.send("Invalid character selected.", ephemeral=True)
+                    return
+                
+                # 새 채팅 채널 생성
+                guild = interaction.guild
+                user = interaction.user
+                
+                # 채널 이름 생성
+                channel_name = f"{character_info.get('emoji', '💬')}-{selected_char.lower()}-{user.display_name.lower()}"
+                
+                # 채널 생성
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
+                
+                channel = await guild.create_text_channel(
+                    name=channel_name,
+                    overwrites=overwrites,
+                    topic=f"Private chat with {selected_char}"
+                )
+                
+                # 활성 채널에 추가
+                self.active_channels[channel.id] = selected_char
+                
+                # 환영 메시지 전송
+                embed = discord.Embed(
+                    title=f"🌸 {selected_char}와의 대화",
+                    description=f"안녕하세요! 저는 {selected_char}입니다. 무엇을 도와드릴까요?",
+                    color=discord.Color.gold()
+                )
+                embed.add_field(
+                    name="💡 팁",
+                    value="`/close` 명령어로 대화를 종료할 수 있습니다.",
+                    inline=False
+                )
+                
+                await channel.send(embed=embed)
+                await interaction.followup.send(f"새로운 채팅 채널이 생성되었습니다: {channel.mention}", ephemeral=True)
+                
+            except Exception as e:
+                print(f"Error in character_select_callback: {e}")
+                try:
+                    await interaction.followup.send("채널 생성 중 오류가 발생했습니다. 다시 시도해주세요.", ephemeral=True)
+                except:
+                    pass
 
         async def story_character_select_callback(self, interaction: discord.Interaction, selected_char: str):
             # 이 함수는 더 이상 사용되지 않지만, 다른 곳에서 호출될 경우를 대비해 유지합니다.
@@ -6138,7 +6200,7 @@ class QuestView(discord.ui.View):
         if claimable_quests:
             self.add_item(QuestClaimSelect(claimable_quests, bot_instance))
 
-    class StoryCharacterSelectView(discord.ui.View):
+    class CharacterSelectView(discord.ui.View):
         def __init__(self, bot_instance: "BotSelector"):
             super().__init__(timeout=180)
             self.bot = bot_instance
@@ -6155,8 +6217,28 @@ class QuestView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction):
                 selected_char = self.values[0]
+                # 일반 채팅용 캐릭터 선택 콜백 호출
+                await self.bot.character_select_callback(interaction, selected_char)
+
+    class StoryCharacterSelectView(discord.ui.View):
+        def __init__(self, bot_instance: "BotSelector"):
+            super().__init__(timeout=180)
+            self.bot = bot_instance
+            options = [
+                discord.SelectOption(label=name, value=name, emoji=info.get('emoji'))
+                for name, info in CHARACTER_INFO.items()
+            ]
+            self.add_item(self.StoryCharacterSelect(options, self.bot))
+
+        class StoryCharacterSelect(discord.ui.Select):
+            def __init__(self, options: list, bot_instance: "BotSelector"):
+                super().__init__(placeholder="Choose a character...", options=options)
+                self.bot = bot_instance
+
+            async def callback(self, interaction: discord.Interaction):
+                selected_char = self.values[0]
                 # story_character_select_callback 호출
-                await self.story_character_select_callback(interaction, selected_char)
+                await self.bot.story_character_select_callback(interaction, selected_char)
 
 
     class StoryStageSelectView(discord.ui.View):
