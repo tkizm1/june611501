@@ -6072,6 +6072,16 @@ class BotSelector(commands.Bot):
             return
         # --- End of Story Mode Handling ---
 
+        # 캐릭터 채팅 채널 처리
+        if message.channel.name.startswith("chat-"):
+            # 해당 채널의 캐릭터 봇 찾기
+            for char_name, bot in self.character_bots.items():
+                if message.channel.id in bot.active_channels:
+                    # 캐릭터 봇으로 메시지 전달
+                    await bot.on_message(message)
+                    return
+            return
+
         # 롤플레잉 채널 처리
         if message.channel.name.startswith("rp-"):
             session = self.roleplay_manager.get_session(message.channel.id)

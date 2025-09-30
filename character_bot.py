@@ -1598,27 +1598,64 @@ Time-based Response:
         except Exception as e:
             print(f"[ERROR] send_affinity_greeting: {e}")
 
+    async def send_affinity_notification(self, channel, character_name, affinity_level):
+        """호감도 달성 시 알림 메시지를 보냅니다."""
+        try:
+            # CloudFlare 이미지 URL 가져오기
+            from config import CLOUDFLARE_IMAGE_BASE_URL
+            
+            if affinity_level == 20:
+                embed = discord.Embed(
+                    title="🎭 Roleplay Mode Unlocked!",
+                    description="Congratulations! Roleplay mode is now available! Use /roleplay to enjoy various roleplay modes with your character!",
+                    color=discord.Color.purple()
+                )
+                embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
+                embed.add_field(
+                    name="What's New",
+                    value="• Interactive roleplay scenarios\n• Character-specific personalities\n• Enhanced conversation depth",
+                    inline=False
+                )
+                embed.set_footer(text="Keep building your bond to unlock more features!")
+                
+            elif affinity_level == 50:
+                embed = discord.Embed(
+                    title="📖 Story Mode Unlocked!",
+                    description="Congratulations! Story mode is now available! Use /story to discover various hidden stories of your character!",
+                    color=discord.Color.gold()
+                )
+                embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
+                embed.add_field(
+                    name="What's New",
+                    value="• Character backstory chapters\n• Interactive story choices\n• Exclusive story rewards",
+                    inline=False
+                )
+                embed.set_footer(text="Your bond has grown strong enough for deeper stories!")
+            
+            await channel.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error sending affinity notification: {e}")
+
     async def check_and_send_affinity_notifications(self, message, character, user_id, prev_score, new_score):
         """호감도 달성 시 알림을 보냅니다."""
         try:
             # 20 달성 체크
             if prev_score < 20 <= new_score:
                 if not self.db.check_affinity_notification_sent(user_id, character, 20):
-                    # bot_selector에서 알림 함수 import
-                    from bot_selector import send_affinity_notification
-                    await send_affinity_notification(message.channel, character, 20)
+                    await self.send_affinity_notification(message.channel, character, 20)
                     self.db.mark_affinity_notification_sent(user_id, character, 20)
             
             # 50 달성 체크
             if prev_score < 50 <= new_score:
                 if not self.db.check_affinity_notification_sent(user_id, character, 50):
-                    # bot_selector에서 알림 함수 import
-                    from bot_selector import send_affinity_notification
-                    await send_affinity_notification(message.channel, character, 50)
+                    await self.send_affinity_notification(message.channel, character, 50)
                     self.db.mark_affinity_notification_sent(user_id, character, 50)
                     
         except Exception as e:
             print(f"Error sending affinity notifications: {e}")
+            import traceback
+            traceback.print_exc()
 
 async def run_all_bots():
     selector_bot = None
