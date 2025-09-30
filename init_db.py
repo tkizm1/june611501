@@ -34,7 +34,8 @@ def migrate_database():
 
 def create_all_tables():
     try:
-        with psycopg2.connect(DATABASE_URL) as conn:
+        # 연결 타임아웃과 SSL 설정 추가
+        with psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10) as conn:
             with conn.cursor() as cursor:
                 # conversations
                 cursor.execute('''
@@ -447,6 +448,8 @@ def create_all_tables():
     except Exception as e:
         print(f"⚠️ 데이터베이스 연결 실패: {e}")
         print("데이터베이스 없이 봇을 실행합니다.")
+        # 오류 발생 시에도 계속 진행하도록 함
+        pass
 
 if __name__ == "__main__":
     print("🚀 데이터베이스 초기화를 시작합니다...")

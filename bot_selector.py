@@ -652,7 +652,8 @@ except Exception as e:
     print(f"Error initializing DatabaseManager: {e}")
     import traceback
     print(traceback.format_exc())
-    raise
+    print("Continuing without database...")
+    db = None
 
 print("\n=== Initialization Complete ===\n")
 
@@ -5759,16 +5760,36 @@ class BotSelector(commands.Bot):
 
     def format_daily_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            # 실제 퀘스트 데이터를 생성하여 반환
-            quest_data = {
-                'name': 'Daily Conversation',
-                'progress': 0,
-                'max_progress': 20,
-                'claimed': False,
-                'completed': False,
-                'reward': 'Random Common Item x1'
-            }
-            quests = [quest_data]
+            # 기본 퀘스트 데이터를 생성하여 반환 (긴 형식)
+            quests = [
+                {
+                    'id': 'daily_conversation',
+                    'name': '💬 Daily Conversation',
+                    'progress': 0,
+                    'max_progress': 20,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Random Common Item x1'
+                },
+                {
+                    'id': 'daily_affinity_gain',
+                    'name': '💖 Affinity +5',
+                    'progress': 0,
+                    'max_progress': 5,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Random Common Item x1'
+                },
+                {
+                    'id': 'daily_card_obtain',
+                    'name': '🃏 Get New Card',
+                    'progress': 0,
+                    'max_progress': 1,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Random Common Item x1'
+                }
+            ]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5791,16 +5812,18 @@ class BotSelector(commands.Bot):
 
     def format_weekly_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            # 실제 퀘스트 데이터를 생성하여 반환
-            quest_data = {
-                'name': '7-Day Login Streak',
-                'progress': 0,
-                'max_progress': 7,
-                'claimed': False,
-                'completed': False,
-                'reward': 'Random Epic Items x2'
-            }
-            quests = [quest_data]
+            # 기본 퀘스트 데이터를 생성하여 반환 (긴 형식)
+            quests = [
+                {
+                    'id': 'weekly_login',
+                    'name': '⏳ 7-Day Login Streak',
+                    'progress': 0,
+                    'max_progress': 7,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Random Epic Items x2'
+                }
+            ]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5826,16 +5849,19 @@ class BotSelector(commands.Bot):
 
     def format_levelup_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            # 실제 퀘스트 데이터를 생성하여 반환
-            quest_data = {
-                'name': 'Level-up Quest',
-                'progress': 0,
-                'max_progress': 1,
-                'claimed': False,
-                'completed': False,
-                'reward': 'Common Item x1'
-            }
-            quests = [quest_data]
+            # 기본 퀘스트 데이터를 생성하여 반환 (긴 형식)
+            quests = [
+                {
+                    'id': 'levelup_quest',
+                    'name': '⭐ Level-up Quest',
+                    'description': 'Complete level-up quest',
+                    'progress': 0,
+                    'max_progress': 1,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Common Item x1'
+                }
+            ]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5856,16 +5882,18 @@ class BotSelector(commands.Bot):
 
     def format_story_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            # 실제 퀘스트 데이터를 생성하여 반환
-            quest_data = {
-                'name': 'Story Quest',
-                'progress': 0,
-                'max_progress': 1,
-                'claimed': False,
-                'completed': False,
-                'reward': 'Epic Gifts x3'
-            }
-            quests = [quest_data]
+            # 기본 퀘스트 데이터를 생성하여 반환 (긴 형식)
+            quests = [
+                {
+                    'id': 'story_quest',
+                    'name': '📚 Story Quest',
+                    'progress': 0,
+                    'max_progress': 1,
+                    'claimed': False,
+                    'completed': False,
+                    'reward': 'Epic Gifts x3'
+                }
+            ]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):

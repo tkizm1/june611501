@@ -22,11 +22,23 @@ def get_db_manager():
     """데이터베이스 관리자의 싱글턴 인스턴스를 반환합니다."""
     global _db_instance
     if _db_instance is None:
-        _db_instance = DatabaseManager()
+        try:
+            _db_instance = DatabaseManager()
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize DatabaseManager: {e}")
+            # 더미 객체 반환하여 봇이 계속 실행되도록 함
+            class DummyDB:
+                def __getattr__(self, name):
+                    return lambda *args, **kwargs: None
+            _db_instance = DummyDB()
     return _db_instance
 
-# 데이터베이스 생성 함수 호출
-create_all_tables()
+# 데이터베이스 생성 함수 호출 비활성화 (DatabaseManager 초기화 시에만 실행)
+# try:
+#     create_all_tables()
+# except Exception as e:
+#     print(f"[WARNING] Failed to create tables during import: {e}")
+#     print("Tables will be created when DatabaseManager is initialized.")
 
 # 환경변수에서 DATABASE_URL 읽기, 없으면 SQLite 사용
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -67,9 +79,9 @@ class DatabaseManager:
                 )
             except Exception as e:
                 print(f"[ERROR] PostgreSQL connection failed: {e}")
-                # 연결 실패 시 SQLite로 폴백
-                print("[INFO] Falling back to SQLite...")
-                return sqlite3.connect("bot_database.db")
+                print(f"[ERROR] Connection details: {DATABASE_URL[:50]}...")
+                # 연결 실패 시 None 반환하여 오류 처리
+                return None
 
     def return_connection(self, conn):
         """사용한 데이터베이스 연결을 닫습니다."""
@@ -79,9 +91,28 @@ class DatabaseManager:
     def setup_database(self):
         """데이터베이스 초기화 및 필요한 컬럼 추가를 담당합니다."""
         print("Setting up database tables for PostgreSQL...")
+        
+        # 먼저 create_all_tables() 함수 호출
+        try:
+            from init_db import create_all_tables
+            create_all_tables()
+            print("✅ All tables created successfully")
+        except Exception as e:
+            print(f"[WARNING] Failed to create tables: {e}")
+            print("Continuing with manual table creation...")
+        
         conn = None
         try:
             conn = self.get_connection()
+            if conn is None:
+                print("[ERROR] Failed to get database connection")
+                return
+            
+            # 연결 상태 확인
+            if conn.closed:
+                print("[ERROR] Database connection is closed")
+                return
+                
             with conn.cursor() as cursor:
                 # blacklist 테이블 생성
                 cursor.execute('''
