@@ -1,5 +1,5 @@
 from calendar import day_name
-import requests
+import httpx
 import os
 import discord
 from discord.ext import commands
@@ -29,7 +29,7 @@ from database_manager import get_db_manager, DatabaseManager
 from typing import Dict, TYPE_CHECKING, Any, Self
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import re
 import langdetect
@@ -5221,21 +5221,28 @@ class BotSelector(commands.Bot):
             """Check your payment and delivery history."""
             try:
                 user_id = interaction.user.id
-                activity = self.db.get_user_recent_activity(user_id, limit=5)
-                url = f"http://69.176.84.110:5000/user/paid/{self.user.id}/product"
+                #activity = self.db.get_user_recent_activity(user_id, limit=5)
+                url = f"http://69.176.84.110:5000/user/paid/{user_id}/product"
                 # 默认查询返回全部支付过的记录
                 payload = {"product_ids": ["GIFT_PACK_5", "MESSAGE_PACK_200"]}
                 headers = {"content-type": "application/json"}
-
-                response = requests.post(url, json=payload, headers=headers)
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(url, json=payload, headers=headers)
                 activity = {
-                    'payments':[]
+                    'payments':[],
+                    "deliveries":None,
+                    "total_deliveries":None,
+                    "total_payments":0,
                 }
+                response = response.json()
                 for i in response['result']:
                     if i['count']>0:
-                        activity['payments'].append({"product_id":i['item'],"amount":i['count'],"created_at":i['created']})
-                    else:
-                        activity['payments'].append({"product_id":i['item'],"status":False})
+                        for ii in range(i['count']):
+                            activity['payments'].append({"product_id":i['item'],"amount":i['value'],"status":"completed","created_at":i['created'],"currency":"USD",})
+                        activity['total_payments']+=i['value']
+                    # else:
+                    #     activity['payments'].append({"product_id":i['item'],"amount":0,"status":False,"created_at":None,"currency":"USD",})
+                print(activity)
                 
                 embed = discord.Embed(
                     title="📋 Payment & Delivery Log",
@@ -5248,7 +5255,8 @@ class BotSelector(commands.Bot):
                     payment_text = ""
                     for payment in activity['payments']:
                         status_emoji = "✅" if payment['status'] == 'completed' else "❌"
-                        time_str = payment['created_at'].strftime("%m/%d %H:%M") if payment['created_at'] else "Unknown"
+                        # time_str = payment['created_at'] if payment['created_at'] else "Unknown"
+                        time_str = datetime.strptime(payment['created_at'], "%Y-%m-%d %H:%M:%S")+timedelta(hours=8)
                         payment_text += f"{status_emoji} **{payment['product_id']}** - {payment['amount']} {payment['currency']} ({time_str})\n"
                     
                     embed.add_field(
@@ -5310,6 +5318,7 @@ class BotSelector(commands.Bot):
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 
             except Exception as e:
+                traceback.print_exc()
                 print(f"Error in log_command: {e}")
                 await interaction.response.send_message("Error occurred while checking your log.", ephemeral=True)
 
