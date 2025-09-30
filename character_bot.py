@@ -14,9 +14,6 @@ from config import (
     OPENAI_API_KEY,
     MILESTONE_COLORS,
     SELECTOR_TOKEN as TOKEN,
-    KAGARI_TOKEN,
-    EROS_TOKEN,
-    ELYSIA_TOKEN,
     STORY_CHAPTERS,
     CARD_PROBABILITIES,
     CHARACTER_PROMPTS,
@@ -392,33 +389,20 @@ class CharacterBot(commands.Bot):
 
         # 1:1 채팅이 아닌 경우 처리하지 않음
         if message.channel.id not in self.active_channels:
-            print(f"[DEBUG] Channel {message.channel.id} not in active_channels: {self.active_channels}")
             return
-
-        print(f"[DEBUG] on_message called for channel {message.channel.id}, user {message.author.id}, content: '{message.content}'")
-
-        # 채널 활동 시간 업데이트 (자동 삭제 기능용)
-        if hasattr(self, 'bot_selector') and self.bot_selector:
-            import time
-            self.bot_selector.channel_last_activity[message.channel.id] = time.time()
 
         # 1. 빈 메시지/시스템 메시지/히스토리 임베드 무시
         if not message.content or message.content.strip() == "":
-            print(f"[DEBUG] Empty message ignored")
             return
         if message.content.startswith("(system)") or message.content.startswith("(smiling) Hello!"):
-            print(f"[DEBUG] System message ignored: {message.content}")
             return
         if message.content.startswith("Previous conversations") or message.content.startswith("Affinity information"):
-            print(f"[DEBUG] History embed ignored: {message.content}")
             return
         if message.content.lower() in ["english.", "korean.", "japanese."]:
-            print(f"[DEBUG] Language selection message ignored: {message.content}")
             return
 
         # [추가] 이미지 첨부가 있을 때 Vision API로 분석
         if message.attachments:
-            print(f"[DEBUG] Image attachment detected, processing...")
             image_url = message.attachments[0].url
             try:
                 vision_result = await self.vision_manager.analyze_image(image_url)
@@ -459,15 +443,11 @@ class CharacterBot(commands.Bot):
 
             # 닉네임이 설정되어 있는지 확인
             nickname = self.db.get_user_nickname(user_id, character)
-            print(f"[DEBUG] get_user_nickname({user_id}, {character}) -> {nickname}")
-            
             if nickname:
                 # 닉네임이 있으면 바로 대화 처리
-                print(f"[DEBUG] Nickname found, calling process_normal_message")
                 await self.process_normal_message(message)
             else:
                 # 닉네임이 없으면 무시 (add_channel에서 이미 처리됨)
-                print(f"[DEBUG] No nickname found, ignoring message")
                 return
 
         except Exception as e:
@@ -476,13 +456,11 @@ class CharacterBot(commands.Bot):
             print(traceback.format_exc())
 
     async def process_normal_message(self, message):
-        print(f"[DEBUG] process_normal_message called for user {message.author.id}, character {self.character_name}")
         user_id = message.author.id
         character = self.character_name
         now = datetime.utcnow()
 
         # 첫 대화 체크 및 호감도 레벨별 인사 메시지
-        print(f"[DEBUG] Calling check_and_send_greeting")
         await self.check_and_send_greeting(message, user_id, character)
 
         # 안전장치 확인 (BotSelector에서 가져온 안전장치 사용)
@@ -617,24 +595,16 @@ class CharacterBot(commands.Bot):
         highest_milestone_before = affinity_before.get('highest_milestone_achieved', 0)
 
         try:
-            print(f"[DEBUG] Starting emotion analysis and context building")
             # 감정 분석과 컨텍스트 생성을 병렬로 처리
             emotion_task = asyncio.create_task(self.analyze_emotion(message.content))
             context_task = asyncio.create_task(self.build_conversation_context(user_id, character, message.content))
             emotion_score, context = await asyncio.gather(emotion_task, context_task)
-            print(f"[DEBUG] Emotion score: {emotion_score}, context length: {len(context)}")
 
             # [추가] 감정 로그 DB 기록 (모든 캐릭터 공통)
             self.db.add_emotion_log(user_id, character, emotion_score, message.content, now)
-            print(f"[DEBUG] Emotion log added to database")
 
-            print(f"[DEBUG] Getting AI response")
             response = await self.get_ai_response(context)
-            print(f"[DEBUG] AI response received: {response[:100]}...")
-            
-            print(f"[DEBUG] Sending bot message")
             await self.send_bot_message(message.channel, response, user_id)
-            print(f"[DEBUG] Bot message sent successfully")
 
             # 새로운 점수 및 마일스톤 계산
             new_score = prev_score + emotion_score
@@ -1053,13 +1023,9 @@ class CharacterBot(commands.Bot):
                 print(f"Channel {channel_id} not found")
                 return
 
-            # 닉네임 확인 (안전하게)
-            try:
-                nickname = self.db.get_user_nickname(user_id, self.character_name)
-                print(f"[DEBUG] get_user_nickname({user_id}, {self.character_name}) -> {nickname}")
-            except Exception as db_error:
-                print(f"[ERROR] Database error getting nickname: {db_error}")
-                nickname = None
+            # 닉네임 확인
+            nickname = self.db.get_user_nickname(user_id, self.character_name)
+            print(f"[DEBUG] get_user_nickname({user_id}, {self.character_name}) -> {nickname}")
 
             if nickname:
                 # 기존 사용자: 환영 메시지 전송
@@ -1627,176 +1593,16 @@ Time-based Response:
         except Exception as e:
             print(f"[ERROR] send_affinity_greeting: {e}")
 
-    async def send_affinity_notification(self, channel, character_name, affinity_level):
-        """호감도 달성 시 알림 메시지를 보냅니다."""
-        try:
-            # CloudFlare 이미지 URL 가져오기
-            from config import CLOUDFLARE_IMAGE_BASE_URL
-            
-            if affinity_level == 20:
-                embed = discord.Embed(
-                    title="🎭 Roleplay Mode Unlocked!",
-                    description="Congratulations! Roleplay mode is now available! Use /roleplay to enjoy various roleplay modes with your character!",
-                    color=discord.Color.purple()
-                )
-                embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
-                embed.add_field(
-                    name="What's New",
-                    value="• Interactive roleplay scenarios\n• Character-specific personalities\n• Enhanced conversation depth",
-                    inline=False
-                )
-                embed.set_footer(text="Keep building your bond to unlock more features!")
-                
-            elif affinity_level == 50:
-                embed = discord.Embed(
-                    title="📖 Story Mode Unlocked!",
-                    description="Congratulations! Story mode is now available! Use /story to discover various hidden stories of your character!",
-                    color=discord.Color.gold()
-                )
-                embed.set_thumbnail(url=f"{CLOUDFLARE_IMAGE_BASE_URL}/{character_name.lower()}_profile.png")
-                embed.add_field(
-                    name="What's New",
-                    value="• Character backstory chapters\n• Interactive story choices\n• Exclusive story rewards",
-                    inline=False
-                )
-                embed.set_footer(text="Your bond has grown strong enough for deeper stories!")
-            
-            await channel.send(embed=embed)
-            
-        except Exception as e:
-            print(f"Error sending affinity notification: {e}")
-
-    async def check_and_send_affinity_notifications(self, message, character, user_id, prev_score, new_score):
-        """호감도 달성 시 알림을 보냅니다."""
-        try:
-            # 20 달성 체크
-            if prev_score < 20 <= new_score:
-                if not self.db.check_affinity_notification_sent(user_id, character, 20):
-                    await self.send_affinity_notification(message.channel, character, 20)
-                    self.db.mark_affinity_notification_sent(user_id, character, 20)
-            
-            # 50 달성 체크
-            if prev_score < 50 <= new_score:
-                if not self.db.check_affinity_notification_sent(user_id, character, 50):
-                    await self.send_affinity_notification(message.channel, character, 50)
-                    self.db.mark_affinity_notification_sent(user_id, character, 50)
-                    
-        except Exception as e:
-            print(f"Error sending affinity notifications: {e}")
-            import traceback
-            traceback.print_exc()
-
 async def run_all_bots():
-    # Import here to avoid circular import
-    from bot_selector import BotSelector
-    
-    db = DatabaseManager()
-    character_bots = {}
-
-    # Initialize character bots
-    for char_name in CHARACTER_INFO.keys():
-        character_bots[char_name] = CharacterBot(char_name, db)
-
-    # Initialize selector bot
-    selector_bot = BotSelector()
-    selector_bot.character_bots = character_bots
-
+    selector_bot = None
     try:
-        print("Starting bot initialization...")
-        tasks = []
-
-        # Start selector bot
-        tasks.append(run_bot(selector_bot, TOKEN, "Selector"))
-
-        # Start character bots
-        for name, bot in character_bots.items():
-            token = globals()[f"{name.upper()}_TOKEN"]
-            tasks.append(run_bot(bot, token, name))
-
-        # Wait for all bots to start
-        await asyncio.gather(*tasks)
-        print("All bots started successfully!")
-
-        # Keep the program running
-        while True:
-            await asyncio.sleep(1)
-
+        selector_bot = BotSelector()
+        await selector_bot.start(TOKEN)
     except Exception as e:
-        print(f"Fatal error in run_all_bots: {e}")
-        raise e
+        print(f"Error: {e}")
     finally:
-        # Cleanup in case of error
-        if 'selector_bot' in locals():
+        if selector_bot is not None:
             await selector_bot.close()
-        for bot in character_bots.values():
-            await bot.close()
-
-async def run_bot(bot, token, name):
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            print(f"Starting {name} bot...")
-            await bot.start(token)
-            print(f"{name} bot started successfully!")
-            return
-        except Exception as e:
-            print(f"Error starting {name} (attempt {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                print(f"Retrying in 5 seconds...")
-                await asyncio.sleep(5)
-            else:
-                print(f"Max retries reached. {name} failed to start.")
-                raise
-
-    async def handle_dm_message(self, message: discord.Message):
-        """DM 메시지를 처리합니다."""
-        try:
-            user_id = message.author.id
-            character_name = self.character_name
-            
-            print(f"[DEBUG] CharacterBot.handle_dm_message - 캐릭터: {character_name}, 사용자: {user_id}, 메시지: {message.content}")
-            
-            # 언어 감지
-            language = self.detect_language(message.content)
-            
-            # 데이터베이스에 메시지 저장
-            self.db.add_message(
-                channel_id=message.channel.id,
-                user_id=user_id,
-                character_name=character_name,
-                role="user",
-                content=message.content,
-                language=language
-            )
-            
-            # AI 응답 생성
-            ai_response = await self.get_ai_response([
-                {"role": "user", "content": message.content}
-            ])
-            
-            # 응답 전송
-            await message.channel.send(f"**{character_name}**: {ai_response}")
-            
-            # 랜덤 카드 획득 체크
-            card_type, card_id = self.get_random_card(character_name, user_id)
-            if card_id:
-                # 카드를 실제로 데이터베이스에 추가
-                success = self.db.add_user_card(user_id, character_name, card_id)
-                if success:
-                    card_info = get_card_info_by_id(character_name, card_id)
-                    if card_info:
-                        embed = discord.Embed(
-                            title="🎉 New Card Acquired!",
-                            description=f"**{card_info['name']}**\n{card_info['description']}",
-                            color=0x00ff00
-                        )
-                        embed.set_thumbnail(url=card_info['image_url'])
-                        await message.channel.send(embed=embed)
-                        print(f"[DEBUG] 카드 획득 성공 - 사용자: {user_id}, 캐릭터: {character_name}, 카드: {card_id}")
-                        
-        except Exception as e:
-            print(f"[ERROR] CharacterBot.handle_dm_message 오류: {e}")
-            await message.channel.send("❌ 메시지 처리 중 오류가 발생했습니다.")
 
 print(f"[DEBUG] CharacterBot type:", type(CharacterBot))
 print(f"[DEBUG] dir(CharacterBot):", dir(CharacterBot))
@@ -1825,7 +1631,7 @@ class CardClaimButton(discord.ui.Button):
             if success:
                 embed = discord.Embed(
                     title="🎉 Card Claimed!",
-                    description=f"You have claimed the {self.character_name} {self.milestone} conversation milestone card.\nUse `/info` to check your cards!",
+                    description=f"You have claimed the {self.character_name} {self.milestone} conversation milestone card.\nUse `/mycard` to check your cards!",
                     color=discord.Color.green()
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -1886,7 +1692,7 @@ class CardClaimView(discord.ui.View):
                 button.disabled = True
                 button.label = "✅ Claimed"
                 await interaction.message.edit(embed=embed, view=self)
-                await interaction.followup.send("Card successfully claimed! Check your /info.", ephemeral=True)
+                await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
             else:
                 # 이미 카드를 가지고 있는 경우
                 await interaction.followup.send("You have already claimed this card.", ephemeral=True)
@@ -1898,7 +1704,7 @@ class CardClaimView(discord.ui.View):
                 button.disabled = True
                 button.label = "✅ Claimed"
                 await interaction.message.edit(view=self)
-                await interaction.followup.send("Card successfully claimed! Check your /info.", ephemeral=True)
+                await interaction.followup.send("Card successfully claimed! Check your/mycard.", ephemeral=True)
             else:
                 await interaction.followup.send("An error occurred while claiming the card. Please try again.", ephemeral=True)
 
@@ -2043,6 +1849,28 @@ class NicknameInputModal(discord.ui.Modal, title="Enter Nickname"):
             if not interaction.response.is_done():
                 await interaction.response.send_message("A server error occurred.", ephemeral=True)
 
+    async def check_and_send_affinity_notifications(self, message, character, user_id, prev_score, new_score):
+        """호감도 달성 시 알림을 보냅니다."""
+        try:
+            # 20 달성 체크
+            if prev_score < 20 <= new_score:
+                if not self.db.check_affinity_notification_sent(user_id, character, 20):
+                    # bot_selector에서 알림 함수 import
+                    from bot_selector import send_affinity_notification
+                    await send_affinity_notification(message.channel, character, 20)
+                    self.db.mark_affinity_notification_sent(user_id, character, 20)
+            
+            # 50 달성 체크
+            if prev_score < 50 <= new_score:
+                if not self.db.check_affinity_notification_sent(user_id, character, 50):
+                    # bot_selector에서 알림 함수 import
+                    from bot_selector import send_affinity_notification
+                    await send_affinity_notification(message.channel, character, 50)
+                    self.db.mark_affinity_notification_sent(user_id, character, 50)
+                    
+        except Exception as e:
+            print(f"Error sending affinity notifications: {e}")
+
 def is_similar(a, b):
     return SequenceMatcher(None, a, b).ratio() > 0.85
 
@@ -2064,7 +1892,3 @@ def is_spam(user_id, message, now, user_message_buffers):
     if len(emoji_msgs) >= 5:
         return True, "Spam detected: Emoji or special character repeated 5 or more times."
     return False, ""
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run_all_bots())

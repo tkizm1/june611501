@@ -22,29 +22,14 @@ def get_db_manager():
     """데이터베이스 관리자의 싱글턴 인스턴스를 반환합니다."""
     global _db_instance
     if _db_instance is None:
-        try:
-            _db_instance = DatabaseManager()
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize DatabaseManager: {e}")
-            # 더미 객체 반환하여 봇이 계속 실행되도록 함
-            class DummyDB:
-                def __getattr__(self, name):
-                    return lambda *args, **kwargs: None
-            _db_instance = DummyDB()
+        _db_instance = DatabaseManager()
     return _db_instance
 
-# 데이터베이스 생성 함수 호출 비활성화 (DatabaseManager 초기화 시에만 실행)
-# try:
-#     create_all_tables()
-# except Exception as e:
-#     print(f"[WARNING] Failed to create tables during import: {e}")
-#     print("Tables will be created when DatabaseManager is initialized.")
+# 데이터베이스 생성 함수 호출
+create_all_tables()
 
-# 환경변수에서 DATABASE_URL 읽기, 없으면 SQLite 사용
+# 환경변수에서 DATABASE_URL 읽기
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    # SQLite 사용 (로컬 개발용)
-    DATABASE_URL = "sqlite:///bot_database.db"
 
 class DatabaseManager:
     def __init__(self):
@@ -62,26 +47,7 @@ class DatabaseManager:
 
     def get_connection(self):
         """데이터베이스 연결을 가져옵니다."""
-        if DATABASE_URL.startswith("sqlite"):
-            import sqlite3
-            db_path = DATABASE_URL.replace("sqlite:///", "")
-            return sqlite3.connect(db_path)
-        else:
-            # PostgreSQL 연결에 더 안전한 설정 추가
-            try:
-                return psycopg2.connect(
-                    DATABASE_URL, 
-                    sslmode='require',
-                    connect_timeout=10,  # 연결 타임아웃 10초
-                    keepalives_idle=30,  # TCP keepalive 설정
-                    keepalives_interval=10,
-                    keepalives_count=3
-                )
-            except Exception as e:
-                print(f"[ERROR] PostgreSQL connection failed: {e}")
-                print(f"[ERROR] Connection details: {DATABASE_URL[:50]}...")
-                # 연결 실패 시 None 반환하여 오류 처리
-                return None
+        return psycopg2.connect(DATABASE_URL, sslmode='require')
 
     def return_connection(self, conn):
         """사용한 데이터베이스 연결을 닫습니다."""
@@ -91,28 +57,9 @@ class DatabaseManager:
     def setup_database(self):
         """데이터베이스 초기화 및 필요한 컬럼 추가를 담당합니다."""
         print("Setting up database tables for PostgreSQL...")
-        
-        # 먼저 create_all_tables() 함수 호출
-        try:
-            from init_db import create_all_tables
-            create_all_tables()
-            print("✅ All tables created successfully")
-        except Exception as e:
-            print(f"[WARNING] Failed to create tables: {e}")
-            print("Continuing with manual table creation...")
-        
         conn = None
         try:
             conn = self.get_connection()
-            if conn is None:
-                print("[ERROR] Failed to get database connection")
-                return
-            
-            # 연결 상태 확인
-            if conn.closed:
-                print("[ERROR] Database connection is closed")
-                return
-                
             with conn.cursor() as cursor:
                 # blacklist 테이블 생성
                 cursor.execute('''
@@ -135,8 +82,6 @@ class DatabaseManager:
                 self._add_column_if_not_exists(cursor, 'affinity', 'highest_milestone_achieved', 'INTEGER DEFAULT 0')
                 self._add_column_if_not_exists(cursor, 'user_quest_events', 'character_name', 'TEXT')
                 self._add_column_if_not_exists(cursor, 'user_quest_events', 'card_id', 'TEXT')
-                self._add_column_if_not_exists(cursor, 'affinity', 'affinity_20_notified', 'BOOLEAN DEFAULT FALSE')
-                self._add_column_if_not_exists(cursor, 'affinity', 'affinity_50_notified', 'BOOLEAN DEFAULT FALSE')
             conn.commit()
             print("Database setup completed.")
         except Exception as e:
@@ -297,58 +242,6 @@ class DatabaseManager:
             print(f"Error updating affinity: {e}")
             if conn: conn.rollback()
             return None
-        finally:
-            self.return_connection(conn)
-
-    def check_affinity_notification_sent(self, user_id: int, character_name: str, threshold: int) -> bool:
-        """호감도 달성 알림이 이미 전송되었는지 확인합니다."""
-        conn = None
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT notification_sent FROM affinity_notifications 
-                    WHERE user_id = %s AND character_name = %s AND threshold = %s
-                """, (user_id, character_name, threshold))
-                result = cursor.fetchone()
-                return result is not None and result[0]
-        except Exception as e:
-            print(f"Error checking affinity notification: {e}")
-            return False
-        finally:
-            self.return_connection(conn)
-
-    def mark_affinity_notification_sent(self, user_id: int, character_name: str, threshold: int):
-        """호감도 달성 알림 전송 기록을 저장합니다."""
-        conn = None
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as cursor:
-                # 테이블이 존재하지 않으면 생성
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS affinity_notifications (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        character_name VARCHAR(50) NOT NULL,
-                        threshold INTEGER NOT NULL,
-                        notification_sent BOOLEAN DEFAULT TRUE,
-                        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(user_id, character_name, threshold)
-                    )
-                """)
-                
-                # 알림 기록 삽입 또는 업데이트
-                cursor.execute("""
-                    INSERT INTO affinity_notifications (user_id, character_name, threshold, notification_sent)
-                    VALUES (%s, %s, %s, TRUE)
-                    ON CONFLICT (user_id, character_name, threshold)
-                    DO UPDATE SET notification_sent = TRUE, sent_at = CURRENT_TIMESTAMP
-                """, (user_id, character_name, threshold))
-                
-                conn.commit()
-        except Exception as e:
-            print(f"Error marking affinity notification: {e}")
-            if conn: conn.rollback()
         finally:
             self.return_connection(conn)
 
@@ -1182,7 +1075,7 @@ class DatabaseManager:
                 # CST 시간대 변환을 사용한 정확한 계산
                 try:
                     cursor.execute(
-                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND DATE(timestamp AT TIME ZONE 'Asia/Shanghai') = %s AND message_role = 'user'",
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND DATE(timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s AND message_role = 'user'",
                         (user_id, today_cst)
                     )
                     count = cursor.fetchone()[0]
@@ -1334,12 +1227,9 @@ class DatabaseManager:
             # 추가 디버깅: 실제 DB에서 확인
             self.debug_card_share_events(user_id)
             
-            return True  # 성공적으로 기록됨
-            
         except Exception as e:
             print(f"[ERROR] record_card_share 실패: {e}")
             if conn: conn.rollback()
-            return False
         finally:
             self.return_connection(conn)
 
@@ -2229,7 +2119,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT COUNT(*) FROM conversations 
                     WHERE message_role = 'user' 
-                    AND DATE(timestamp AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
+                    AND DATE(timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
                 """)
                 return cursor.fetchone()[0]
     
@@ -2247,7 +2137,7 @@ class DatabaseManager:
                 # UTC+8 시간대 (CST) 기준으로 오늘 카드 지급 수 계산
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
-                    WHERE DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
+                    WHERE DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = CURRENT_DATE AT TIME ZONE 'Asia/Shanghai'
                 """)
                 return cursor.fetchone()[0]
     
@@ -2255,17 +2145,16 @@ class DatabaseManager:
         """특정 사용자의 오늘(CST 기준) 카드 획득 수를 반환합니다."""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                # CST 시간대 기준으로 오늘 카드 획득 수 계산
+                # CST 시간대 기준으로 오늘 카드 획득 수 계산 (다른 데일리 퀘스트와 동일한 방식)
                 today_cst = get_today_cst()
                 print(f"[DEBUG] get_user_daily_card_count - user_id={user_id}, today_cst={today_cst}")
                 
                 # acquired_at이 NULL이 아닌 카드들만 조회 (NULL인 카드는 제외)
-                # 시간대 변환을 올바르게 수행
                 cursor.execute("""
                     SELECT COUNT(*) FROM user_cards 
                     WHERE user_id = %s 
                     AND acquired_at IS NOT NULL
-                    AND DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = %s
+                    AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
                 count = cursor.fetchone()[0]
@@ -2276,7 +2165,7 @@ class DatabaseManager:
                     SELECT card_id, character_name, acquired_at FROM user_cards 
                     WHERE user_id = %s 
                     AND acquired_at IS NOT NULL
-                    AND DATE(acquired_at AT TIME ZONE 'Asia/Shanghai') = %s
+                    AND DATE(acquired_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai') = %s
                 """, (user_id, today_cst))
                 
                 today_cards = cursor.fetchall()
