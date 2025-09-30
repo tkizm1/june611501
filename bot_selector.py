@@ -5784,8 +5784,16 @@ class BotSelector(commands.Bot):
 
     def format_daily_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            # 기본 예시 퀘스트를 반환 (진행도 0)
-            return "⏳ 💬 Daily Conversation\n`[□□□□□□□□□□]` (0/20)\n└ Reward: Random Common Item x1"
+            # 실제 퀘스트 데이터를 생성하여 반환
+            quest_data = {
+                'name': 'Daily Conversation',
+                'progress': 0,
+                'max_progress': 20,
+                'claimed': False,
+                'completed': False,
+                'reward': 'Random Common Item x1'
+            }
+            quests = [quest_data]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5808,7 +5816,16 @@ class BotSelector(commands.Bot):
 
     def format_weekly_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            return "⏳ 📅 7-Day Login Streak\n🔥 ⬜⬜⬜⬜⬜⬜⬜ (0/7)\n└ Reward: Random Epic Items x2"
+            # 실제 퀘스트 데이터를 생성하여 반환
+            quest_data = {
+                'name': '7-Day Login Streak',
+                'progress': 0,
+                'max_progress': 7,
+                'claimed': False,
+                'completed': False,
+                'reward': 'Random Epic Items x2'
+            }
+            quests = [quest_data]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5834,7 +5851,16 @@ class BotSelector(commands.Bot):
 
     def format_levelup_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            return "⏳ ⭐ Level-up Quest\n`[□□□□□□□□□□]` (0/1)\n└ Reward: Common Item x1"
+            # 실제 퀘스트 데이터를 생성하여 반환
+            quest_data = {
+                'name': 'Level-up Quest',
+                'progress': 0,
+                'max_progress': 1,
+                'claimed': False,
+                'completed': False,
+                'reward': 'Common Item x1'
+            }
+            quests = [quest_data]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
@@ -5855,7 +5881,16 @@ class BotSelector(commands.Bot):
 
     def format_story_quests(self, quests: list) -> str:
         if quests is None or len(quests) == 0:
-            return "⏳ 📖 Story Quest\n`[□□□□□□□□□□]` (0/1)\n└ Reward: Epic Gifts x3"
+            # 실제 퀘스트 데이터를 생성하여 반환
+            quest_data = {
+                'name': 'Story Quest',
+                'progress': 0,
+                'max_progress': 1,
+                'claimed': False,
+                'completed': False,
+                'reward': 'Epic Gifts x3'
+            }
+            quests = [quest_data]
         quest_lines = []
         for q in quests:
             if q.get('claimed'):
