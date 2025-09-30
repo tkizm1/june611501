@@ -392,7 +392,10 @@ class CharacterBot(commands.Bot):
 
         # 1:1 채팅이 아닌 경우 처리하지 않음
         if message.channel.id not in self.active_channels:
+            print(f"[DEBUG] Channel {message.channel.id} not in active_channels: {self.active_channels}")
             return
+
+        print(f"[DEBUG] on_message called for channel {message.channel.id}, user {message.author.id}, content: '{message.content}'")
 
         # 채널 활동 시간 업데이트 (자동 삭제 기능용)
         if hasattr(self, 'bot_selector') and self.bot_selector:
@@ -401,16 +404,21 @@ class CharacterBot(commands.Bot):
 
         # 1. 빈 메시지/시스템 메시지/히스토리 임베드 무시
         if not message.content or message.content.strip() == "":
+            print(f"[DEBUG] Empty message ignored")
             return
         if message.content.startswith("(system)") or message.content.startswith("(smiling) Hello!"):
+            print(f"[DEBUG] System message ignored: {message.content}")
             return
         if message.content.startswith("Previous conversations") or message.content.startswith("Affinity information"):
+            print(f"[DEBUG] History embed ignored: {message.content}")
             return
         if message.content.lower() in ["english.", "korean.", "japanese."]:
+            print(f"[DEBUG] Language selection message ignored: {message.content}")
             return
 
         # [추가] 이미지 첨부가 있을 때 Vision API로 분석
         if message.attachments:
+            print(f"[DEBUG] Image attachment detected, processing...")
             image_url = message.attachments[0].url
             try:
                 vision_result = await self.vision_manager.analyze_image(image_url)
@@ -451,11 +459,15 @@ class CharacterBot(commands.Bot):
 
             # 닉네임이 설정되어 있는지 확인
             nickname = self.db.get_user_nickname(user_id, character)
+            print(f"[DEBUG] get_user_nickname({user_id}, {character}) -> {nickname}")
+            
             if nickname:
                 # 닉네임이 있으면 바로 대화 처리
+                print(f"[DEBUG] Nickname found, calling process_normal_message")
                 await self.process_normal_message(message)
             else:
                 # 닉네임이 없으면 무시 (add_channel에서 이미 처리됨)
+                print(f"[DEBUG] No nickname found, ignoring message")
                 return
 
         except Exception as e:
@@ -464,11 +476,13 @@ class CharacterBot(commands.Bot):
             print(traceback.format_exc())
 
     async def process_normal_message(self, message):
+        print(f"[DEBUG] process_normal_message called for user {message.author.id}, character {self.character_name}")
         user_id = message.author.id
         character = self.character_name
         now = datetime.utcnow()
 
         # 첫 대화 체크 및 호감도 레벨별 인사 메시지
+        print(f"[DEBUG] Calling check_and_send_greeting")
         await self.check_and_send_greeting(message, user_id, character)
 
         # 안전장치 확인 (BotSelector에서 가져온 안전장치 사용)
@@ -603,16 +617,24 @@ class CharacterBot(commands.Bot):
         highest_milestone_before = affinity_before.get('highest_milestone_achieved', 0)
 
         try:
+            print(f"[DEBUG] Starting emotion analysis and context building")
             # 감정 분석과 컨텍스트 생성을 병렬로 처리
             emotion_task = asyncio.create_task(self.analyze_emotion(message.content))
             context_task = asyncio.create_task(self.build_conversation_context(user_id, character, message.content))
             emotion_score, context = await asyncio.gather(emotion_task, context_task)
+            print(f"[DEBUG] Emotion score: {emotion_score}, context length: {len(context)}")
 
             # [추가] 감정 로그 DB 기록 (모든 캐릭터 공통)
             self.db.add_emotion_log(user_id, character, emotion_score, message.content, now)
+            print(f"[DEBUG] Emotion log added to database")
 
+            print(f"[DEBUG] Getting AI response")
             response = await self.get_ai_response(context)
+            print(f"[DEBUG] AI response received: {response[:100]}...")
+            
+            print(f"[DEBUG] Sending bot message")
             await self.send_bot_message(message.channel, response, user_id)
+            print(f"[DEBUG] Bot message sent successfully")
 
             # 새로운 점수 및 마일스톤 계산
             new_score = prev_score + emotion_score
