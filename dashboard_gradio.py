@@ -162,7 +162,7 @@ def get_daily_affinity_gain(character_name=None):
     today = datetime.now().strftime('%Y-%m-%d')
     if character_name:
         df = pd.read_sql_query("""
-            SELECT user_id, SUM(score) as today_gain
+            SELECT user_id, SUM(score_change) as today_gain
             FROM affinity_log
             WHERE character_name = %s AND DATE(timestamp AT TIME ZONE 'Asia/Seoul') = %s
             GROUP BY user_id
@@ -170,7 +170,7 @@ def get_daily_affinity_gain(character_name=None):
         """, conn, params=(character_name, today))
     else:
         df = pd.read_sql_query("""
-            SELECT user_id, character_name, SUM(score) as today_gain
+            SELECT user_id, character_name, SUM(score_change) as today_gain
             FROM affinity_log
             WHERE DATE(timestamp AT TIME ZONE 'Asia/Seoul') = %s
             GROUP BY user_id, character_name
